@@ -138,16 +138,15 @@ No outbound calls for historical or resolution data occur during bootcamp sessio
 
 ```
 DataService
-├── SeriesStore          # historical time series, keyed by series_id
-├── SeriesMetadataStore  # units, description, source, frequency hint per series_id
-├── ResolutionStore      # ground truth values at resolution timestamps
+├── SeriesStore          # historical time series + metadata, keyed by series_id
+├── ResolutionStore      # ground truth values at resolution timestamps (scaffolded)
 ├── CutoffEnforcer       # enforces information cutoff discipline (see below)
 └── ProviderAdapters
     ├── BaseAdapter          # protocol / ABC all adapters must implement
-    ├── LocalCSVAdapter      # first-class path for custom datasets
-    ├── StatCanAdapter
-    ├── FREDAdapter
-    └── yfinanceAdapter
+    ├── LocalCSVAdapter      # first-class path for custom datasets (planned)
+    ├── StatCanAdapter       # ✅ implemented
+    ├── FREDAdapter          # planned
+    └── yfinanceAdapter      # planned
 ```
 
 ### Canonical Internal Format
@@ -162,7 +161,7 @@ Each series in `SeriesStore` is stored as a DataFrame with the following columns
 
 **`series_id` is the store key, not a column.** One DataFrame per registered series.
 
-**One value column per series.** Multivariate data (e.g., CPI + employment) is registered as separate series. Relationships between series are declared in `ForecastingTask` (via `past_covariate_ids`), not in the data format itself.
+**One value column per series.** Multivariate data (e.g., CPI + employment) is registered as separate series. Which series are related is captured in dataset documentation and config files — not in the data format or in `ForecastingTask`.
 
 This format handles regular time series, irregular event sequences, and sparse data uniformly — missing values are absent rows, not NaN sentinels. No frequency needs to be declared at registration time.
 
