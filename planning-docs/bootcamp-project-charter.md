@@ -102,17 +102,13 @@ Ontario's electricity grid, operated by the Independent Electricity System Opera
 
 Note: I've looked into this dataset and it's not all that interesting. The data are highly aggregated and even the units aren't super clear. That said, the data are regularly published and up to date, so it does provide a viable real-world prediction target.
 
-### Canadian Economic Vitals — StatCan \+ BoC \+ FRED
+### Canadian Economic Vitals — StatCan \+ FRED
 
-Macroeconomic indicators from Statistics Canada (CPI, employment, trade) and the Bank of Canada (policy rate, monetary policy reports, CAD/USD). This track foregrounds the interaction between quantitative data and policy context — a natural domain for both LLM Processes and discrete event forecasters. Though USA focused, FRED is another excellent source of economic data.
+Macroeconomic indicators from Statistics Canada (CPI, employment, trade) alongside FRED data. This track foregrounds the interaction between quantitative data and policy context — a natural domain for both LLM Processes and discrete event forecasters.
 
-Note: Compared to FRED and StatCan, the BoC data doesn't seem to be all that useful. I think we can just stick with FRED and StatCan to provide historical data and prediction targets/resolutions. 
+### Equities / Earnings — yfinance
 
-### Equities / Earnings — yfinance \+ SEDAR+
-
-Canadian-listed equities and earnings data, sourced via yfinance and SEDAR+ (Canada's public securities filing database). This track supports the full range of forecasting paradigms and naturally accommodates both continuous forecasting (price direction, return distribution) and discrete event framing (earnings beats, threshold crossings).
-
-Note: yfinance looks good, but SEDAR+ does not have an API and it seems like automated use is not permitted. It would be extremely laborious/inconvnient to try to provide any mechanical support for SEDAR+. Perhaps a highly motivated participant could find useful context in its documents, but the only interface available is a web-based search utility that seems quite basic/limited. We should not support SEDAR+ for the bootcamp. I hesitate to even mention it, so let's not.
+Canadian-listed equities and earnings data sourced via yfinance. This track supports the full range of forecasting paradigms and naturally accommodates both continuous forecasting (price direction, return distribution) and discrete event framing (earnings beats, threshold crossings).
 
 ### Metaculus — World Events (Canadian lens)
 
@@ -129,8 +125,8 @@ Not every method applies equally well to every dataset. The table below indicate
 | Dataset | Numerical Forecasters | LLM Processes | Discrete Event Forecasters |
 | :---- | :---: | :---: | :---: |
 | **IESO** (Ontario electricity) | ✅ | ✅ | ◑ |
-| **Canadian Economic Vitals** (StatCan \+ BoC) | ✅ | ✅ | ◑ |
-| **Equities / Earnings** (yfinance \+ SEDAR+) | ✅ | ✅ | ✅ |
+| **Canadian Economic Vitals** (StatCan \+ FRED) | ✅ | ✅ | ◑ |
+| **Equities / Earnings** (yfinance) | ✅ | ✅ | ✅ |
 | **Metaculus** (Canadian-lens world events) | — | — | ✅ |
 
 **Key**  
@@ -150,13 +146,13 @@ Not every method applies equally well to every dataset. The table below indicate
 * *LLM Processes:* Forecast demand conditioned on weather narrative, day-of-week context, and known grid events  
 * *Discrete Event (◑):* "Will Ontario peak demand exceed 18,000 MW tomorrow?" or "Will day-ahead prices exceed $100/MWh during the 5–7pm window?"
 
-**Canadian Economic Vitals — StatCan \+ BoC**
+**Canadian Economic Vitals — StatCan \+ FRED**
 
 * *Numerical:* Forecast next StatCan CPI release value using VAR model on basket series; forecast next-day CAD/USD using ARIMA  
 * *LLM Processes:* Forecast CPI conditioned on recent policy announcements, commodity price movements, and trade context in natural language  
 * *Discrete Event (◑):* "Will the next food CPI release show an increase greater than 0.3%?" or "Will CAD/USD close above 0.72 on Friday?"
 
-**Equities / Earnings — yfinance \+ SEDAR+**
+**Equities / Earnings — yfinance**
 
 * *Numerical:* Forecast 30-day price direction or return distribution using historical OHLCV data  
 * *LLM Processes:* Forecast price conditioned on earnings transcript sentiment, analyst consensus, and macro context  

@@ -1,3 +1,20 @@
+## Mar 31, 2026 — Architecture decisions (session 2)
+
+Key decisions from this session are now recorded in `technical-design.md`. Summary:
+
+- **Darts** selected as primary numerical forecasting library (over sktime). Reasons: consistent API, first-class backtest utilities, modular install, lower support burden.
+- **Evaluation architecture**: unified loop — `Predictor → Prediction → Resolution → Score`. Backtesting and live evaluation share the same architecture; they differ only in whether ground truth is already known.
+- **Two prediction payload types**: `ContinuousForecast` (values + quantiles) and `BinaryForecast` (probability). Metaculus conventions followed for the latter.
+- **Data service** is a standalone package. Deterministic data (historical series, resolution targets) is pre-populated locally; stochastic context (news, web search) is live at call time. Components: `SeriesStore`, `ResolutionStore`, `CutoffEnforcer`, and provider adapters for StatCan, FRED, and yfinance.
+- **Information cutoff discipline** via `CutoffEnforcer` is the unifying teaching concept across both paradigms.
+- **Langfuse** for tracing, integrated at the Predictor level.
+- **Build plan**: two concrete passes (StatCan economic series first, then Metaculus) before extracting shared abstractions.
+- **Open question**: how the data service handles new monthly data releases (important for live benchmark extension).
+
+Also created `technical-design.md` as the technical source of truth, and updated `AGENTS.md` with maintenance instructions.
+
+---
+
 ## Mar 31, 2026
 
 I am indeed thinking it makes sense for me to just start building around (1) the Canada's Food Price Report (CFPR) forecasting task and (2) Metaculus forecasting questions. These cover two distinct forecasting modalities: multivariate/multi-target time series forecasting and discrete event prediction. 
