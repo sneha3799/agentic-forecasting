@@ -36,9 +36,9 @@ The installable library package is named **`aieng-forecasting`**, located at `ai
 Structure:
 ```
 aieng-forecasting/aieng/forecasting/
-├── data/               # DataService, SeriesStore, CutoffEnforcer, adapters
+├── data/               # DataService, ForecastContext, SeriesStore, CutoffEnforcer, adapters
 │   └── adapters/       # BaseAdapter, StatCanAdapter, LocalCSVAdapter (future)
-└── evaluation/         # ForecastingTask (evaluation harness, future)
+└── evaluation/         # ForecastingTask, Predictor ABC, Prediction types (future)
 ```
 
 Tests mirror the package under `aieng-forecasting/tests/aieng/forecasting/`.
@@ -96,22 +96,51 @@ Fields:
 
 For backtesting, the harness iterates over historical origins defined by the task. For live evaluation, it waits for the resolution date. The loop is identical in both modes.
 
+### ForecastContext
+
+**Decision date:** Apr 2, 2026
+
+`ForecastContext` is the **predictor-facing, read-only, cutoff-scoped data view**. It is what the backtesting and live evaluation harnesses pass to predictors — predictors never receive a raw `DataService`.
+
+Key design properties:
+- **Bakes in `as_of`**: the information cutoff date is set once at construction time. `get_series()` always enforces it automatically — there is no way for a predictor to accidentally access future data.
+- **Additive, not a replacement**: `DataService` remains as the registration and management layer (used by setup scripts and notebooks). `ForecastContext` is its companion for the predictor interface.
+- **Mode-agnostic**: the harness creates a `ForecastContext` via `DataService.context(as_of)` for each backtest origin. In live evaluation, the same factory is called with the current date. The predictor interface is identical in both modes.
+
+**Predictor interface:**
+```python
+def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
+    series = context.get_series(task.target_series_id)
+    # series contains only observations available as of context.as_of
+    ...
+```
+
+**Harness pattern:**
+```python
+ctx = data_service.context(as_of=origin_date)
+prediction = predictor.predict(task, ctx)
+```
+
+**Why not pass `DataService` + `as_of` separately?** Passing them separately makes cutoff enforcement opt-in — a predictor must remember to pass `as_of` on every query. `ForecastContext` makes it structurally impossible to forget.
+
 ### Predictor Responsibilities
 
 Everything about *how* the problem is solved belongs to the `Predictor`:
 
-- **Which series to fetch** — a predictor may request any series from the `DataService` (subject to the cutoff enforced by `CutoffEnforcer`). Covariate selection is a modelling decision, not a task definition.
+- **Which series to fetch** — a predictor may request any series from the `ForecastContext` (subject to the cutoff it already enforces). Covariate selection is a modelling decision, not a task definition.
 - **Gap-filling** — how to handle irregular or missing observations before passing data to a model. A statistical model might forward-fill; a neural model might interpolate; an LLM predictor gets the raw observations. This is declared in the predictor's own configuration, not in the task.
 - **Model selection, prompting, tool use** — all predictor-internal.
+- **Information discipline for stochastic context** — LLM-based predictors may use live tools (news, web search) that cannot be retroactively cut off. This is inherent to agentic predictors and is a known limitation for backtesting. It is part of the challenge, not a system failure.
 
 This separation means any two predictors — a vanilla ARIMA and a multi-step LLM agent — can be evaluated against the same `ForecastingTask` without the task needing to know anything about either of them. The evaluation loop is:
 
 ```
-ForecastingTask  →  defines the question
-Predictor        →  decides how to answer it
-Prediction       →  the answer
-Resolution       →  ground truth
-Score            →  how well the answer matched
+ForecastingTask   →  defines the question
+ForecastContext   →  defines the information state at forecast time
+Predictor         →  decides how to answer it
+Prediction        →  the answer
+Resolution        →  ground truth
+Score             →  how well the answer matched
 ```
 
 ### Series Relationships
@@ -149,16 +178,20 @@ No outbound calls for historical or resolution data occur during bootcamp sessio
 ### Architecture
 
 ```
-DataService
-├── SeriesStore          # historical time series + metadata, keyed by series_id
-├── ResolutionStore      # ground truth values at resolution timestamps (scaffolded)
-├── CutoffEnforcer       # enforces information cutoff discipline (see below)
-└── ProviderAdapters
-    ├── BaseAdapter          # protocol / ABC all adapters must implement
-    ├── LocalCSVAdapter      # first-class path for custom datasets (planned)
-    ├── StatCanAdapter       # ✅ implemented
-    ├── FREDAdapter          # planned
-    └── yfinanceAdapter      # planned
+DataService                  # registration + management layer (scripts, notebooks)
+├── SeriesStore              # historical time series + metadata, keyed by series_id
+├── ResolutionStore          # ground truth values at resolution timestamps (scaffolded)
+├── CutoffEnforcer           # enforces information cutoff discipline (see below)
+├── context(as_of) ──────────────────────────────────────────────────────────────────┐
+└── ProviderAdapters                                                                  │
+    ├── BaseAdapter          # protocol / ABC all adapters must implement             │
+    ├── LocalCSVAdapter      # first-class path for custom datasets (planned)         │
+    ├── StatCanAdapter       # ✅ implemented                                         │
+    ├── FREDAdapter          # planned                                                │
+    └── yfinanceAdapter      # planned                                                │
+                                                                                      │
+ForecastContext  ◄────────────────────────────────────────────────────────────────────┘
+  (predictor-facing, read-only, cutoff-scoped view — what predictors receive)
 ```
 
 ### Canonical Internal Format

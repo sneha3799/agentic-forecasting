@@ -1,3 +1,43 @@
+## Apr 2, 2026 (session 3) — ForecastContext: interface design + implementation
+
+### What we discussed
+
+This session was a deliberate, slow design conversation before building. Key threads:
+
+- **Backtesting first, live evaluation later.** The bootcamp is the near-term target. Live evaluation (including the longer-term on-chain / public immutable prediction vision) is kept in sight but not built yet. The design goal: don't commit to anything in the backtesting layer that would make the live evaluation path harder.
+- **The `DataService` naming problem.** "Service" implies a running process/API. What we have is an in-process Python object. The name was misleading to future participants. More importantly, `DataService` was doing two things: (1) registration/management of series, and (2) providing a data view to predictors. These deserve to be distinct.
+- **The `as_of` footgun.** The proposed predictor signature `predict(task, data_service, as_of)` had a subtle flaw: `as_of` and `DataService` are separate arguments, making cutoff enforcement opt-in. A predictor (especially an agentic one using tool calls) could forget to pass `as_of` when querying. The fix: bake `as_of` into the object the predictor receives.
+- **`ForecastContext` decided.** The clean solution is a lightweight, read-only, cutoff-scoped companion to `DataService`. The harness creates it via `DataService.context(as_of)`. Predictors receive a `ForecastContext` and call `get_series()` without ever managing the cutoff date themselves.
+- **What `DataService` is for.** Registration (called by setup scripts), ad-hoc notebook queries, and `summary()`. Not passed to predictors.
+- **Information discipline for agentic predictors.** LLM-based predictors using live tools (news, web search) cannot be retroactively cut off. This is inherent and known — it's part of the challenge, and part of what will cause poor backtest-to-live generalization. Not a system flaw.
+- **Feast / point-in-time correctness analogy.** The closest prior art is ML feature stores (Feast's "point-in-time join"). No forecasting library we're aware of has this as a first-class concept — this is a genuine differentiator of our architecture.
+
+### What we built
+
+- **`ForecastContext`** (`aieng/forecasting/data/context.py`): read-only, cutoff-scoped data view. `get_series()` always enforces `as_of`. `get_metadata()` and `series_ids` also delegated.
+- **`DataService.context(as_of)`**: factory method that creates a `ForecastContext` from the underlying `SeriesStore`.
+- **8 new tests** (`TestForecastContext` + 2 `TestDataService` factory tests): 32 total, all passing. `make lint` clean.
+- **`technical-design.md` updated**: `ForecastContext` section added to evaluation architecture; `DataService` architecture diagram updated; predictor interface contract documented.
+
+### Confirmed predictor interface
+
+```python
+def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
+    series = context.get_series(task.target_series_id)
+    # series is already filtered to context.as_of — can't leak future data
+    ...
+```
+
+### What's next
+
+1. **Define `Prediction` payload types** — `ContinuousForecast` Pydantic model (point + quantiles, `predictor_id`, `task_id`, `issued_at`, `as_of`, `horizon`). Design for serializability from day one (YAML-roundtrippable, hashable) so persistence / on-chain submission is easy to add later. `BinaryForecast` can wait for the Metaculus pass.
+2. **Define `Predictor` ABC** — abstract base class with `predict(task, context) -> Prediction`. Probably lives in `aieng/forecasting/evaluation/predictor.py`. Keep it minimal.
+3. **First baseline predictor** — naive (last known value) or seasonal naive via Darts, implementing the `Predictor` ABC. This is the forcing function that validates the interface end-to-end.
+4. **Backtesting harness** — iterate over historical origins for a `ForecastingTask`, call `predictor.predict()`, collect `Prediction` objects, resolve against the series, score with CRPS. Goal: run two predictor variants on the CPI All-items task and compare results. This is the first complete end-to-end backtest.
+5. **`released_at` for StatCan** — StatCan CPI is published ~3 weeks after the reference month. Fix this before running the backtests so results are not optimistically biased.
+
+---
+
 ## Apr 2, 2026 (session 2)
 
 - I've now played around with the statcan code a bit and found it flexible enough to start with. We can download historical data into series just fine.

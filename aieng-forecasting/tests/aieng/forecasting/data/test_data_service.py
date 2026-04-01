@@ -1,4 +1,4 @@
-"""Tests for SeriesStore and DataService."""
+"""Tests for SeriesStore, DataService, and ForecastContext."""
 
 from datetime import datetime
 from unittest.mock import MagicMock
@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
+from aieng.forecasting.data.context import ForecastContext
 from aieng.forecasting.data.models import SeriesMetadata
 from aieng.forecasting.data.service import DataService
 from aieng.forecasting.data.store import SeriesStore
@@ -84,3 +85,59 @@ class TestDataService:
         summary = self.svc.summary()
         assert {"series_id", "n_obs", "start", "end"}.issubset(summary.columns)
         assert summary.loc[0, "n_obs"] == 2
+
+    def test_context_factory_returns_forecast_context(self) -> None:
+        ctx = self.svc.context(as_of=datetime(2023, 6, 1))
+        assert isinstance(ctx, ForecastContext)
+        assert ctx.as_of == datetime(2023, 6, 1)
+
+    def test_context_factory_enforces_cutoff(self) -> None:
+        """Context created from DataService must apply the same cutoff as get_series."""
+        df = _make_df(["2022-01-01", "2022-02-01", "2022-03-01"], [1.0, 2.0, 3.0])
+        self.svc.register("s1", _make_adapter(df), _make_meta("s1"))
+        as_of = datetime(2022, 2, 1)
+
+        direct = self.svc.get_series("s1", as_of=as_of)
+        via_context = self.svc.context(as_of=as_of).get_series("s1")
+        pd.testing.assert_frame_equal(direct, via_context)
+
+
+class TestForecastContext:
+    def setup_method(self) -> None:
+        self.store = SeriesStore()
+        df = _make_df(["2022-01-01", "2022-02-01", "2022-03-01"], [10.0, 20.0, 30.0])
+        self.store.put("s1", df, _make_meta("s1"))
+
+    def _ctx(self, as_of: str) -> ForecastContext:
+        return ForecastContext(self.store, datetime.fromisoformat(as_of))
+
+    def test_as_of_property(self) -> None:
+        ctx = self._ctx("2022-02-01")
+        assert ctx.as_of == datetime(2022, 2, 1)
+
+    def test_get_series_respects_cutoff(self) -> None:
+        """get_series must exclude observations after the as_of date."""
+        ctx = self._ctx("2022-02-01")
+        result = ctx.get_series("s1")
+        assert list(result["value"]) == [10.0, 20.0]
+
+    def test_get_series_unknown_raises(self) -> None:
+        ctx = self._ctx("2022-06-01")
+        with pytest.raises(KeyError):
+            ctx.get_series("not_registered")
+
+    def test_get_metadata_delegates_to_store(self) -> None:
+        ctx = self._ctx("2022-06-01")
+        meta = ctx.get_metadata("s1")
+        assert meta.series_id == "s1"
+
+    def test_series_ids_reflects_store(self) -> None:
+        ctx = self._ctx("2022-06-01")
+        assert "s1" in ctx.series_ids
+
+    def test_context_is_read_only_view_not_copy(self) -> None:
+        """Two contexts over the same store at different as_of dates must diverge correctly."""
+        ctx_early = self._ctx("2022-01-01")
+        ctx_late = self._ctx("2022-03-01")
+        assert len(ctx_early.get_series("s1")) == 1
+        assert len(ctx_late.get_series("s1")) == 3
