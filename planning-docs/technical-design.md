@@ -36,9 +36,10 @@ The installable library package is named **`aieng-forecasting`**, located at `ai
 Structure:
 ```
 aieng-forecasting/aieng/forecasting/
-├── data/               # DataService, SeriesStore, CutoffEnforcer, adapters
-│   └── adapters/       # BaseAdapter, StatCanAdapter, LocalCSVAdapter (future)
-└── evaluation/         # ForecastingTask (evaluation harness, future)
+├── data/                   # DataService, ForecastContext, SeriesStore, CutoffEnforcer, adapters
+│   └── adapters/           # BaseAdapter, StatCanAdapter, LocalCSVAdapter (future)
+└── evaluation/             # ForecastingTask, Predictor ABC, Prediction types, backtest engine
+    └── predictors/         # ARIMAPredictor (reference baseline)
 ```
 
 Tests mirror the package under `aieng-forecasting/tests/aieng/forecasting/`.
@@ -96,23 +97,125 @@ Fields:
 
 For backtesting, the harness iterates over historical origins defined by the task. For live evaluation, it waits for the resolution date. The loop is identical in both modes.
 
+### ForecastContext
+
+**Decision date:** Apr 2, 2026
+
+`ForecastContext` is the **predictor-facing, read-only, cutoff-scoped data view**. It is what the backtesting and live evaluation harnesses pass to predictors — predictors never receive a raw `DataService`.
+
+Key design properties:
+- **Bakes in `as_of`**: the information cutoff date is set once at construction time. `get_series()` always enforces it automatically — there is no way for a predictor to accidentally access future data.
+- **Additive, not a replacement**: `DataService` remains as the registration and management layer (used by setup scripts and notebooks). `ForecastContext` is its companion for the predictor interface.
+- **Mode-agnostic**: the harness creates a `ForecastContext` via `DataService.context(as_of)` for each backtest origin. In live evaluation, the same factory is called with the current date. The predictor interface is identical in both modes.
+
+**Predictor interface:**
+```python
+def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
+    series = context.get_series(task.target_series_id)
+    # series contains only observations available as of context.as_of
+    ...
+```
+
+**Harness pattern:**
+```python
+ctx = data_service.context(as_of=origin_date)
+prediction = predictor.predict(task, ctx)
+```
+
+**Why not pass `DataService` + `as_of` separately?** Passing them separately makes cutoff enforcement opt-in — a predictor must remember to pass `as_of` on every query. `ForecastContext` makes it structurally impossible to forget.
+
 ### Predictor Responsibilities
 
 Everything about *how* the problem is solved belongs to the `Predictor`:
 
-- **Which series to fetch** — a predictor may request any series from the `DataService` (subject to the cutoff enforced by `CutoffEnforcer`). Covariate selection is a modelling decision, not a task definition.
+- **Which series to fetch** — a predictor may request any series from the `ForecastContext` (subject to the cutoff it already enforces). Covariate selection is a modelling decision, not a task definition.
 - **Gap-filling** — how to handle irregular or missing observations before passing data to a model. A statistical model might forward-fill; a neural model might interpolate; an LLM predictor gets the raw observations. This is declared in the predictor's own configuration, not in the task.
 - **Model selection, prompting, tool use** — all predictor-internal.
+- **Information discipline for stochastic context** — LLM-based predictors may use live tools (news, web search) that cannot be retroactively cut off. This is inherent to agentic predictors and is a known limitation for backtesting. It is part of the challenge, not a system failure.
 
 This separation means any two predictors — a vanilla ARIMA and a multi-step LLM agent — can be evaluated against the same `ForecastingTask` without the task needing to know anything about either of them. The evaluation loop is:
 
 ```
-ForecastingTask  →  defines the question
-Predictor        →  decides how to answer it
-Prediction       →  the answer
-Resolution       →  ground truth
-Score            →  how well the answer matched
+ForecastingTask   →  defines the question
+ForecastContext   →  defines the information state at forecast time
+Predictor         →  decides how to answer it
+Prediction        →  the answer
+Resolution        →  ground truth
+Score             →  how well the answer matched
 ```
+
+### Backtesting: User Model and Interfaces
+
+**Decision date:** Apr 2, 2026
+
+#### How users run backtests
+
+Users invoke backtests directly in code or notebooks — they are not required to submit predictors to an external engine. This is the right model for the bootcamp: low friction, immediate feedback, easy iteration.
+
+The submission-based model (ForecastBench, Numerai, Kaggle) is designed for trust at scale when participants cannot be given ground truth before submitting. That is appropriate for a live competition but adds unnecessary infrastructure overhead for a learning environment. The bridge between the two models: **if `BacktestResult` is a serializable, self-contained Pydantic object, "submitting" later just means running the function and sending the result somewhere.** Nothing in the backtest-first design forecloses that path.
+
+#### `BacktestSpec`
+
+`BacktestSpec` separates *what to evaluate* (the `ForecastingTask`) from *when and how often* (the date range and stride). Both are Pydantic models, both are serializable to YAML.
+
+```python
+class BacktestSpec(BaseModel):
+    task: ForecastingTask
+    start: datetime             # first forecast origin
+    end: datetime               # last forecast origin (inclusive)
+    stride: int = 1             # step size in task-frequency units; 1 = every period
+    warmup: int = 0             # minimum observations required before first forecast
+```
+
+Reference specs for canonical tasks live in `reference_specs/` (YAML files, versioned in the repo). Participants use them as-is or derive their own variants. This makes evaluation reproducible and shareable: the exact spec used for a backtest is part of the result record.
+
+#### `backtest()` function
+
+```python
+from aieng.forecasting.evaluation import backtest
+
+results = backtest(
+    predictor=MyPredictor(),
+    spec=cpi_spec,
+    data_service=svc,
+)
+```
+
+Internally the function:
+1. Derives forecast origins from `spec.start`, `spec.end`, `spec.task.frequency`, `spec.stride`
+2. Applies `spec.warmup` to skip early origins with insufficient history
+3. For each origin: calls `data_service.context(as_of)`, then `predictor.predict(task, ctx)`
+4. Resolves each `Prediction` against the series store
+5. Scores with the appropriate scorer (CRPS for `ContinuousForecast`)
+6. Returns a `BacktestResult`
+
+#### `BacktestResult`
+
+`BacktestResult` is a first-class Pydantic model, not just a DataFrame of scores. It is designed to be YAML-serializable from day one so that it can be:
+- Persisted alongside a predictor implementation
+- Fed to an agent or downstream process as structured context
+- Compared fairly across predictors on the same spec
+- Used as the unit of submission in a future live evaluation or competition
+
+```python
+class BacktestResult(BaseModel):
+    spec: BacktestSpec
+    predictor_id: str
+    predictions: list[Prediction]
+    scores: list[float]         # one per forecast origin, same order
+    mean_crps: float
+    ran_at: datetime
+```
+
+#### Build sequence for this layer
+
+1. `ContinuousForecast` + `Prediction` models — YAML-serializable, hashable
+2. `Predictor` ABC — `predict(task, context) -> Prediction`
+3. Naive baseline predictor (Darts)
+4. `BacktestSpec` + `BacktestResult` models — interfaces before the engine
+5. `backtest()` function
+6. Reference spec YAML for CPI All-items task
+7. End-to-end run comparing two predictors
 
 ### Series Relationships
 
@@ -122,10 +225,17 @@ Which series are meaningfully related (e.g., CPI sub-components, related equity 
 
 Two concrete payload types:
 
-- **`ContinuousForecast`** — point values + quantiles, for economic/time series tasks
-- **`BinaryForecast`** — probability estimate, for Metaculus-style discrete event questions
+- **`ContinuousForecast`** — point forecast + quantiles at standard levels (0.05…0.95), for economic/time series tasks. Designed to be YAML-serializable from day one.
+- **`BinaryForecast`** — probability estimate, for Metaculus-style discrete event questions. (Planned — Pass 2.)
 
 We follow existing standards rather than inventing new ones. For discrete event forecasting, we follow Metaculus conventions.
+
+**`ContinuousForecast` fields:**
+- `point_forecast: float` — central estimate (typically the median of the predictive distribution)
+- `quantiles: dict[float, float]` — standard quantile levels 0.05, 0.10, 0.20…0.90, 0.95; keys must be in (0, 1)
+
+**`Prediction` fields (metadata wrapper):**
+- `predictor_id`, `task_id`, `issued_at`, `as_of`, `forecast_date`, `payload: ContinuousForecast`
 
 ---
 
@@ -149,16 +259,20 @@ No outbound calls for historical or resolution data occur during bootcamp sessio
 ### Architecture
 
 ```
-DataService
-├── SeriesStore          # historical time series + metadata, keyed by series_id
-├── ResolutionStore      # ground truth values at resolution timestamps (scaffolded)
-├── CutoffEnforcer       # enforces information cutoff discipline (see below)
-└── ProviderAdapters
-    ├── BaseAdapter          # protocol / ABC all adapters must implement
-    ├── LocalCSVAdapter      # first-class path for custom datasets (planned)
-    ├── StatCanAdapter       # ✅ implemented
-    ├── FREDAdapter          # planned
-    └── yfinanceAdapter      # planned
+DataService                  # registration + management layer (scripts, notebooks)
+├── SeriesStore              # historical time series + metadata, keyed by series_id
+├── ResolutionStore          # ground truth values at resolution timestamps (scaffolded)
+├── CutoffEnforcer           # enforces information cutoff discipline (see below)
+├── context(as_of) ──────────────────────────────────────────────────────────────────┐
+└── ProviderAdapters                                                                  │
+    ├── BaseAdapter          # protocol / ABC all adapters must implement             │
+    ├── LocalCSVAdapter      # first-class path for custom datasets (planned)         │
+    ├── StatCanAdapter       # ✅ implemented                                         │
+    ├── FREDAdapter          # planned                                                │
+    └── yfinanceAdapter      # planned                                                │
+                                                                                      │
+ForecastContext  ◄────────────────────────────────────────────────────────────────────┘
+  (predictor-facing, read-only, cutoff-scoped view — what predictors receive)
 ```
 
 ### Canonical Internal Format
@@ -198,6 +312,14 @@ The `CutoffEnforcer` enforces a critical principle: **no model or agent may acce
 
 This is the unifying concept across both time series backtesting and discrete event evaluation, and is a core teaching objective of the bootcamp.
 
+### StatCan `released_at` approximation
+
+**Decision date:** Apr 2, 2026
+
+`StatCanAdapter.fetch()` populates `released_at = timestamp + 21 days` to approximate StatCan's ~3-week publication lag. For example, January CPI data (reference month 2023-01-01) is assigned `released_at = 2023-01-22`. This removes the most significant optimistic bias from backtests without requiring the full release calendar API.
+
+A more precise implementation (using StatCan's SDMX release schedule) is deferred.
+
 ### Open Questions
 
 - **Data service update pipeline**: How are updates handled as new data releases come in (e.g., monthly StatCan drops)? Important for the live benchmark extension; needs to be resolved before live evaluation infrastructure is built.
@@ -212,6 +334,19 @@ Shared abstractions are extracted after both passes are working — not designed
 
 1. **Pass 1 — Economic forecasting** (StatCan, continuous series, `ContinuousForecast` payloads)
 2. **Pass 2 — Metaculus predictions** (binary/categorical, discrete event, `BinaryForecast` payloads)
+
+### Phase 1 Build Sequence (Pass 1) — Status
+
+1. ✅ `ContinuousForecast` + `Prediction` Pydantic models — YAML-serializable
+2. ✅ `Predictor` ABC — `predict(task: ForecastingTask, context: ForecastContext) -> Prediction`
+3. ✅ `ARIMAPredictor` (Darts AutoARIMA, 500 Monte Carlo samples) — first reference predictor
+4. ✅ `BacktestSpec` + `BacktestResult` Pydantic models
+5. ✅ `backtest()` function — iterates origins, scores with CRPS via `properscoring`
+6. ✅ `released_at` fix for StatCan CPI (21-day approximation)
+7. ✅ Reference spec YAML (`reference_specs/cpi_allitems_12m.yaml`) — Jan/Jul origins, 2000–2026
+8. ✅ Demo notebook (`implementations/economic_forecasting/cpi_backtest_demo.ipynb`)
+
+**Next:** Second predictor variant for comparison, then Pass 2 (Metaculus / `BinaryForecast`).
 
 ### Long-Term Vision
 

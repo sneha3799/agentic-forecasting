@@ -1,4 +1,124 @@
-## Apr 1, 2026 — CPI series expansion and notebook update (session 7)
+## Apr 2, 2026 (session 5) — CPI backtest end-to-end implementation
+
+### What we built
+
+Full Phase 1 evaluation layer — the repo now supports a complete, runnable backtest.
+
+**New evaluation layer** (`aieng/forecasting/evaluation/`):
+- `prediction.py` — `ContinuousForecast` (point + quantiles at 0.05…0.95), `Prediction` (metadata wrapper). Both YAML-serializable Pydantic models.
+- `predictor.py` — `Predictor` ABC with `predict(task, context) -> Prediction` and `predictor_id` property.
+- `backtest.py` — `BacktestSpec`, `BacktestResult`, `backtest()` function. Derives origins from spec, enforces warmup, resolves ground truth, scores with CRPS (`properscoring`).
+- `predictors/arima.py` — `ARIMAPredictor` using Darts `AutoARIMA`. Fits per-origin, generates 500 Monte Carlo samples, extracts quantiles at standard levels.
+
+**Data layer fix:**
+- `StatCanAdapter.fetch()` now populates `released_at = timestamp + 21 days` to approximate StatCan's publication lag. Removes the optimistic bias in backtests.
+
+**Reference spec:** `reference_specs/cpi_allitems_12m.yaml` — CPI All-items, 12-month horizon, January and July origins, 2000–2026, warmup=24.
+
+**Demo notebook:** `implementations/economic_forecasting/cpi_backtest_demo.ipynb` — 7-cell walkthrough from data registration through serialized result YAML.
+
+**New dependencies:** `darts==0.43.0`, `properscoring==0.1` (+ transitive: scipy, statsmodels, scikit-learn, numba, etc.).
+
+**Tests:** 51 total (was 32), all passing. `make lint` clean.
+
+### Confirmed full pipeline
+
+```python
+import yaml
+from aieng.forecasting.evaluation import ARIMAPredictor, BacktestSpec, backtest
+
+with open("reference_specs/cpi_allitems_12m.yaml") as f:
+    spec = BacktestSpec.model_validate(yaml.safe_load(f))
+
+results = backtest(predictor=ARIMAPredictor(), spec=spec, data_service=svc)
+print(f"Mean CRPS: {results.mean_crps:.4f}")
+```
+
+### What's next
+
+1. **Run the actual backtest** — execute `cpi_backtest_demo.ipynb` end-to-end, record the real mean CRPS as a baseline number.
+2. **Second predictor** — add a second variant (e.g., fixed-order ARIMA or a seasonal naive via Darts) to make the comparison promised in the plan.
+3. **Pass 2 — Metaculus** — `BinaryForecast`, `BinaryPredictor` ABC, discrete event evaluation loop.
+
+---
+
+## Apr 2, 2026 (session 4) — Backtest interface design
+
+### Design direction decided (no code yet)
+
+**How users run backtests.** Users invoke backtests directly — `backtest(predictor, spec, data_service)` — and get results back in-process. No submission engine. This is right for the bootcamp: low friction, immediate feedback, easy iteration. The submission-based model (ForecastBench, Numerai) is deferred; it layers on top naturally once `BacktestResult` is serializable.
+
+**`BacktestSpec` separates *what* from *when*.** `ForecastingTask` defines the prediction problem (target, horizon, frequency). `BacktestSpec` wraps a task and adds the evaluation window (`start`, `end`, `stride`, `warmup`). Both are Pydantic models, both YAML-serializable. Reference specs for canonical tasks will live in `reference_specs/` (YAML, versioned). Participants use them as-is or customize.
+
+**`BacktestResult` is a first-class, serializable object.** Not just a DataFrame of scores — a Pydantic model containing the full spec, predictor identity, list of `Prediction` objects, per-origin scores, and summary stats. Design goals: YAML-roundtrippable (for persistence and versioning), passable to agents as structured context, comparable across predictors on the same spec, and forward-compatible with a future submission/leaderboard mechanism.
+
+**The bridge to live evaluation:** "submitting a backtest result" in a future competition just means serializing this object and sending it somewhere. Nothing in the backtest-first design forecloses that.
+
+### Updated next steps (Phase 1 build sequence)
+
+1. `ContinuousForecast` + `Prediction` Pydantic models — YAML-serializable, hashable
+2. `Predictor` ABC — `predict(task, context) -> Prediction`
+3. Naive baseline predictor (Darts) — forcing function for the interface
+4. `BacktestSpec` + `BacktestResult` Pydantic models — define interfaces before writing the loop
+5. `backtest()` function
+6. `released_at` fix for StatCan CPI (removes optimistic bias)
+7. Reference spec YAML for CPI All-items (`reference_specs/cpi_allitems.yaml`)
+8. End-to-end run: two predictor variants on CPI All-items, compare CRPS
+
+---
+
+## Apr 2, 2026 (session 3) — ForecastContext: interface design + implementation
+
+### What we discussed
+
+This session was a deliberate, slow design conversation before building. Key threads:
+
+- **Backtesting first, live evaluation later.** The bootcamp is the near-term target. Live evaluation (including the longer-term on-chain / public immutable prediction vision) is kept in sight but not built yet. The design goal: don't commit to anything in the backtesting layer that would make the live evaluation path harder.
+- **The `DataService` naming problem.** "Service" implies a running process/API. What we have is an in-process Python object. The name was misleading to future participants. More importantly, `DataService` was doing two things: (1) registration/management of series, and (2) providing a data view to predictors. These deserve to be distinct.
+- **The `as_of` footgun.** The proposed predictor signature `predict(task, data_service, as_of)` had a subtle flaw: `as_of` and `DataService` are separate arguments, making cutoff enforcement opt-in. A predictor (especially an agentic one using tool calls) could forget to pass `as_of` when querying. The fix: bake `as_of` into the object the predictor receives.
+- **`ForecastContext` decided.** The clean solution is a lightweight, read-only, cutoff-scoped companion to `DataService`. The harness creates it via `DataService.context(as_of)`. Predictors receive a `ForecastContext` and call `get_series()` without ever managing the cutoff date themselves.
+- **What `DataService` is for.** Registration (called by setup scripts), ad-hoc notebook queries, and `summary()`. Not passed to predictors.
+- **Information discipline for agentic predictors.** LLM-based predictors using live tools (news, web search) cannot be retroactively cut off. This is inherent and known — it's part of the challenge, and part of what will cause poor backtest-to-live generalization. Not a system flaw.
+- **Feast / point-in-time correctness analogy.** The closest prior art is ML feature stores (Feast's "point-in-time join"). No forecasting library we're aware of has this as a first-class concept — this is a genuine differentiator of our architecture.
+
+### What we built
+
+- **`ForecastContext`** (`aieng/forecasting/data/context.py`): read-only, cutoff-scoped data view. `get_series()` always enforces `as_of`. `get_metadata()` and `series_ids` also delegated.
+- **`DataService.context(as_of)`**: factory method that creates a `ForecastContext` from the underlying `SeriesStore`.
+- **8 new tests** (`TestForecastContext` + 2 `TestDataService` factory tests): 32 total, all passing. `make lint` clean.
+- **`technical-design.md` updated**: `ForecastContext` section added to evaluation architecture; `DataService` architecture diagram updated; predictor interface contract documented.
+
+### Confirmed predictor interface
+
+```python
+def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
+    series = context.get_series(task.target_series_id)
+    # series is already filtered to context.as_of — can't leak future data
+    ...
+```
+
+### What's next
+
+1. **Define `Prediction` payload types** — `ContinuousForecast` Pydantic model (point + quantiles, `predictor_id`, `task_id`, `issued_at`, `as_of`, `horizon`). Design for serializability from day one (YAML-roundtrippable, hashable) so persistence / on-chain submission is easy to add later. `BinaryForecast` can wait for the Metaculus pass.
+2. **Define `Predictor` ABC** — abstract base class with `predict(task, context) -> Prediction`. Probably lives in `aieng/forecasting/evaluation/predictor.py`. Keep it minimal.
+3. **First baseline predictor** — naive (last known value) or seasonal naive via Darts, implementing the `Predictor` ABC. This is the forcing function that validates the interface end-to-end.
+4. **Backtesting harness** — iterate over historical origins for a `ForecastingTask`, call `predictor.predict()`, collect `Prediction` objects, resolve against the series, score with CRPS. Goal: run two predictor variants on the CPI All-items task and compare results. This is the first complete end-to-end backtest.
+5. **`released_at` for StatCan** — StatCan CPI is published ~3 weeks after the reference month. Fix this before running the backtests so results are not optimistically biased.
+
+---
+
+## Apr 2, 2026 (session 2)
+
+- I've now played around with the statcan code a bit and found it flexible enough to start with. We can download historical data into series just fine.
+- I think the next step is to think about how we could start working with an actual forecasting problem. I'm thinking today about backtesting, evaluation, and how we might design the live evaluation mechanism.
+-- If we do move towards "live evaluation" how will forecasters "submit" predictions? Where will those be stored? How will predictors receive feedback? I think there are still some common elements to backtesting here, but I think we need to do some thinking before committing to an architecture.
+- Some other/related things that are on my mind:
+-- We might want to separate logging/tracing/observability from forecast submission and evaluation. LangFuse really might not be the best tool to try to do everything. We should at least challenge this before committing to it. I think it will be important that the mechanism for submitting forecasts is super simple and easy to follow. Just like the backtesting engine.
+-- I still have it in mind that if we define really sound interfaces for predictors, users should be able to participate in backtesting and live evaluation without any trouble.
+-- I think this is something I want to think about: would it make sense for the data service and/or backtesting engine to determine and limit (well, try to limit) what data are available to the predictor, and then the predictor can just do whatever it does under the hood, then generate a prediction? I guess my question is: are the underlying interfaces and the contracts between the components in this system really possible to keep simple, elegant, and effective? I want to do some good, slow thinking about this before we get much further.
+-- And at the end of this, I would love to start with a build goal of running a backtest on two variations of a backtest on a reference forecasting task, just to establish that it works.
+
+## Apr 1, 2026 — CPI series expansion and notebook update (session 1)
 
 ### What we completed
 
@@ -13,7 +133,7 @@
 - `cpi_data_exploration.ipynb` is a runnable demo of series selection and visualisation
 - Notebook output policy is explicit and documented
 
-### What's next (unchanged from session 6)
+### What's next (unchanged from Mar 31 - session 6)
 
 1. **First baseline predictor** — naive/seasonal naive via Darts, forcing definition of `ContinuousForecast` and `Predictor` ABC.
 2. **Backtesting loop** — iterate over historical forecast origins, collect predictions, resolve, score with CRPS.
