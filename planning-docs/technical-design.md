@@ -217,6 +217,73 @@ class BacktestResult(BaseModel):
 6. Reference spec YAML for CPI All-items task
 7. End-to-end run comparing two predictors
 
+### Eval Mode
+
+**Decision date:** Apr 3, 2026
+
+#### Purpose
+
+Eval mode is a protected evaluation layer that sits between backtesting and true live testing. Its purpose is to estimate how well learned or tuned predictors generalise to recent, held-out data — without that held-out data becoming part of the tuning loop.
+
+The key insight: running many backtests against the full historical window is normal and expected (learning, exploration, parameter search). But peeking at the most recent data many times introduces a form of temporal leakage — each peek is a chance to implicitly over-fit to that window. Eval mode addresses this by:
+
+1. **Separating the protected window** — `EvalSpec` covers a short, recent slice that is not used for tuning. Reference eval specs are committed to `reference_specs/` and not modified by participants.
+2. **Budget-limiting access** — `EvalSpec.max_runs` caps how many times a participant may call `evaluate()` against a given spec. An `EvalTracker` (persisted to a YAML file) enforces this limit, raises `EvalBudgetExceededError` when the budget is exhausted, and records `run_number` provenance on each `EvalResult`.
+
+This is structurally analogous to Kaggle's public/private leaderboard split: use the backtest window freely, spend eval budget deliberately.
+
+#### `EvalSpec`
+
+```python
+class EvalSpec(BaseModel):
+    spec_id: str           # stable identifier; keyed by EvalTracker
+    task: ForecastingTask
+    start: datetime        # first forecast origin
+    end: datetime          # last forecast origin (inclusive)
+    stride: int = 1
+    warmup: int = 0
+    max_runs: int | None = None  # None = unlimited
+```
+
+`spec_id` is the key used by `EvalTracker` to record run history. `max_runs` encodes the intended budget directly in the spec YAML so the constraint is visible when specs are reviewed.
+
+#### `EvalTracker`
+
+A lightweight, file-backed counter. Persists to a YAML file at a caller-supplied path:
+
+```yaml
+cpi_allitems_eval_2yr:
+  runs: 2
+  last_run_at: "2026-04-03T10:00:00"
+```
+
+The tracker is user-instantiated and path-agnostic; wiring it to per-user identity (for the bootcamp leaderboard) is deferred.
+
+#### `evaluate()` function
+
+```python
+def evaluate(
+    predictor: Predictor,
+    spec: EvalSpec,
+    data_service: DataService,
+    tracker: EvalTracker | None = None,
+) -> EvalResult:
+```
+
+- Optionally checks and enforces the `max_runs` budget via `tracker`.
+- Runs the same `_run_eval_loop()` used by `backtest()`.
+- Records the run in `tracker` after success.
+- Returns `EvalResult` with `run_number` set (1 if no tracker).
+
+#### `EvalResult`
+
+Mirrors `BacktestResult` with `eval_spec: EvalSpec` instead of `spec: BacktestSpec`, plus `run_number: int` for provenance.
+
+#### Deferred
+
+- **Per-user tracking** — the tracker path is caller-supplied; binding it to a bootcamp participant identity is a future concern.
+- **Spec hash-locking** — automatic detection of spec modifications to prevent a participant from quietly expanding a protected window.
+
 ### Series Relationships
 
 Which series are meaningfully related (e.g., CPI sub-components, related equity indicators) is captured in **dataset documentation and configuration files**, not in the data service itself. Predictors discover and request related series by consulting that documentation or by their own design. A formal global registry is not needed at the scale we're operating at, and is explicitly deferred.
@@ -236,6 +303,7 @@ We follow existing standards rather than inventing new ones. For discrete event 
 
 **`Prediction` fields (metadata wrapper):**
 - `predictor_id`, `task_id`, `issued_at`, `as_of`, `forecast_date`, `payload: ContinuousForecast`
+- `metadata: dict[str, Any]` — optional, defaults to `{}`. Free-form side-channel data the predictor wants to return alongside the forecast (token counts, source lists, Langfuse trace IDs, etc.). The evaluation harness never reads or validates this field — it passes through transparently into `BacktestResult.predictions` and `EvalResult.predictions`. Anything requiring richer structure should be stored externally and referenced here by ID.
 
 ---
 
@@ -345,6 +413,8 @@ Shared abstractions are extracted after both passes are working — not designed
 6. ✅ `released_at` fix for StatCan CPI (21-day approximation)
 7. ✅ Reference spec YAML (`reference_specs/cpi_allitems_12m.yaml`) — Jan/Jul origins, 2000–2026
 8. ✅ Demo notebook (`implementations/economic_forecasting/cpi_backtest_demo.ipynb`)
+9. ✅ `Prediction.metadata` — optional `dict[str, Any]` escape hatch for predictor side-channel data
+10. ✅ Eval mode — `EvalSpec`, `EvalResult`, `EvalTracker`, `EvalBudgetExceededError`, `evaluate()`, reference spec `reference_specs/cpi_allitems_eval_2yr.yaml`
 
 **Next:** Second predictor variant for comparison, then Pass 2 (Metaculus / `BinaryForecast`).
 
