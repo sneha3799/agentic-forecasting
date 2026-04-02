@@ -1,4 +1,42 @@
-## Apr 3, 2026 (session 1)
+## Apr 3, 2026 (session 2) — Prediction metadata + eval mode [Agent]
+
+### What we built
+
+Two additive features on top of the Phase 1 backtest layer.
+
+**`Prediction.metadata`** (`aieng/forecasting/evaluation/prediction.py`):
+- Added `metadata: dict[str, Any]` field to `Prediction`, defaulting to `{}`.
+- The harness never reads or validates it — passes through transparently to `BacktestResult.predictions` and `EvalResult.predictions`.
+- Predictors populate it with whatever structured side-channel data they want (token counts, source lists, Langfuse trace IDs, etc.). No schema enforced beyond `dict[str, Any]`.
+- `Predictor` ABC docstring updated to document this as the canonical pattern for "things that travel with a prediction."
+
+**Eval mode** (`aieng/forecasting/evaluation/eval.py`):
+- `EvalSpec` — mirrors `BacktestSpec` with `spec_id` (tracker key) and `max_runs` (optional budget cap encoded directly in the spec YAML).
+- `EvalResult` — analogous to `BacktestResult`, adds `run_number` provenance (which run against this spec this was).
+- `EvalTracker` — file-backed YAML counter. `runs_for(spec_id)` / `record(spec_id, ran_at)`. Survives process restarts. Path is caller-supplied; wiring to per-user identity is deferred.
+- `EvalBudgetExceededError` — `ValueError` subclass with a clear message when a budget is exhausted.
+- `evaluate()` — checks budget, runs the shared `_run_eval_loop()` (also used by `backtest()`), records the run, returns `EvalResult` with `run_number`.
+- `reference_specs/cpi_allitems_eval_2yr.yaml` — 2024–2026 held-out window, `max_runs: 5`, as a worked example.
+
+**Infra:** extracted `_run_eval_loop()` from `backtest()` to avoid duplication. `evaluation/__init__.py` exports all new symbols. 23 new tests (74 total). `make lint` clean. `technical-design.md` updated.
+
+### Decisions made in discussion
+
+- **Predictor side-effects are free** — predictors may write logs, traces, or any other artifacts as side-effects without the harness caring. `Prediction.metadata` is only for structured data that should travel *with* each prediction.
+- **`metadata` stays generic** — `dict[str, Any]`. No schema enforced at the interface level; users define structure internally.
+- **Eval mode is the "validation set" concept** — backtesting is for learning/tuning (run freely); eval is the held-out window (spend deliberately). `max_runs` on the spec + `EvalTracker` enforce this.
+- **Notebook polish tabled** — the demo notebook runs well. Confidence interval shading and multi-series comparison are deferred.
+
+### What's next
+
+1. **Second predictor** — add a second variant (seasonal naive or fixed-order ARIMA via Darts) to make the comparison the Phase 1 plan called for. This will also be the first real use of `Prediction.metadata` in practice.
+2. **Pass 2 — Metaculus** — `BinaryForecast`, `BinaryPredictor` ABC, discrete event evaluation loop.
+3. **Per-user eval tracking** — defer until bootcamp infrastructure is more defined, but the hook (`EvalTracker` path) is ready.
+4. **Notebook polish** — confidence interval shading, multi-series CPI comparison (Food, Shelter, Water/fuel/electricity). Tabled for now but worth revisiting before the bootcamp.
+
+---
+
+## Apr 3, 2026 (session 1) [Ethan]
 
 A couple of questions on my mind today. These might not be actual problems, but things to think about against our design.
 
@@ -8,7 +46,7 @@ A couple of questions on my mind today. These might not be actual problems, but 
 
 - And just a small thing, but I want to make sure we iterate on the base reference experiment and notebook a bit. I would love to actually see the full prediction confidence intervals as shaded regions, clean up some of the overlapping label, and focus just on predictions for the last 10 years. Perhaps we could expand it to a few more CPI time series, e.g. I would love to see some of the main categories compared: "Food" "Shelter" "Water, fuel and electricity" in a nice, clean visual analysis.
 
-## Apr 2, 2026 (session 5) — CPI backtest end-to-end implementation
+## Apr 2, 2026 (session 5) — CPI backtest end-to-end implementation [Agent]
 
 ### What we built
 
@@ -52,7 +90,7 @@ print(f"Mean CRPS: {results.mean_crps:.4f}")
 
 ---
 
-## Apr 2, 2026 (session 4) — Backtest interface design
+## Apr 2, 2026 (session 4) — Backtest interface design [Ethan & Agent]
 
 ### Design direction decided (no code yet)
 
@@ -77,7 +115,7 @@ print(f"Mean CRPS: {results.mean_crps:.4f}")
 
 ---
 
-## Apr 2, 2026 (session 3) — ForecastContext: interface design + implementation
+## Apr 2, 2026 (session 3) — ForecastContext: interface design + implementation [Ethan & Agent]
 
 ### What we discussed
 
@@ -117,7 +155,7 @@ def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
 
 ---
 
-## Apr 2, 2026 (session 2)
+## Apr 2, 2026 (session 2) [Ethan]
 
 - I've now played around with the statcan code a bit and found it flexible enough to start with. We can download historical data into series just fine.
 - I think the next step is to think about how we could start working with an actual forecasting problem. I'm thinking today about backtesting, evaluation, and how we might design the live evaluation mechanism.
@@ -128,7 +166,7 @@ def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
 -- I think this is something I want to think about: would it make sense for the data service and/or backtesting engine to determine and limit (well, try to limit) what data are available to the predictor, and then the predictor can just do whatever it does under the hood, then generate a prediction? I guess my question is: are the underlying interfaces and the contracts between the components in this system really possible to keep simple, elegant, and effective? I want to do some good, slow thinking about this before we get much further.
 -- And at the end of this, I would love to start with a build goal of running a backtest on two variations of a backtest on a reference forecasting task, just to establish that it works.
 
-## Apr 1, 2026 — CPI series expansion and notebook update (session 1)
+## Apr 1, 2026 — CPI series expansion and notebook update (session 1) [Agent]
 
 ### What we completed
 
@@ -152,7 +190,7 @@ def predict(task: ForecastingTask, context: ForecastContext) -> Prediction:
 
 ---
 
-## Mar 31, 2026 — Bugfix, cleanup, and test review (session 6)
+## Mar 31, 2026 — Bugfix, cleanup, and test review (session 6) [Agent]
 
 ### What we completed
 
@@ -179,7 +217,7 @@ The data service foundation is fully functional:
 
 ---
 
-## Mar 31, 2026 — Data service design + long-term vision (session 3)
+## Mar 31, 2026 — Data service design + long-term vision (session 3) [Ethan & Agent]
 
 Key decisions and design refinements; full details in `technical-design.md`.
 
@@ -193,7 +231,7 @@ Key decisions and design refinements; full details in `technical-design.md`.
 
 ---
 
-## Mar 31, 2026 — First build: StatCan CPI data service (session 5)
+## Mar 31, 2026 — First build: StatCan CPI data service (session 5) [Agent]
 
 Implemented the data service layer and StatCan CPI adapter. All 35 unit tests passing.
 
@@ -207,7 +245,7 @@ Implemented the data service layer and StatCan CPI adapter. All 35 unit tests pa
 
 ---
 
-## Mar 31, 2026 — ForecastingTask / Predictor separation (session 4)
+## Mar 31, 2026 — ForecastingTask / Predictor separation (session 4) [Ethan & Agent]
 
 - Clarified that `ForecastingTask` defines the *problem* only: `task_id`, `target_series_id`, `horizon`, `frequency`, `resolution_fn`, `description`. It says nothing about how to solve the problem.
 - Covariate selection, gap-fill strategy, and model choice are all `Predictor` responsibilities. A predictor requests whatever series it wants from the `DataService` (subject to cutoff); the task doesn't constrain this.
@@ -216,7 +254,7 @@ Implemented the data service layer and StatCan CPI adapter. All 35 unit tests pa
 
 ---
 
-## Mar 31, 2026 — Architecture decisions (session 2)
+## Mar 31, 2026 — Architecture decisions (session 2) [Ethan & Agent]
 
 Key decisions from this session are now recorded in `technical-design.md`. Summary:
 
@@ -233,7 +271,7 @@ Also created `technical-design.md` as the technical source of truth, and updated
 
 ---
 
-## Mar 31, 2026
+## Mar 31, 2026 [Ethan]
 
 I am indeed thinking it makes sense for me to just start building around (1) the Canada's Food Price Report (CFPR) forecasting task and (2) Metaculus forecasting questions. These cover two distinct forecasting modalities: multivariate/multi-target time series forecasting and discrete event prediction.
 
@@ -256,7 +294,7 @@ I just updated the bootcamp-project-charter. A couple of ideas are coming togeth
 - In fact, after some basic review, I think we can make an early decision to lean more into Darts as the default/reference forecasting library that will will support.
 -- (We could even consider building a set of agent skills that would enable agents to use Darts more effectively...)
 
-## Mar 30, 2026
+## Mar 30, 2026 [Ethan]
 TODOs
 
 - Dig into metaculus “data” to see what we can get. Will likely need to reach out to their team to get access for research purposes.
