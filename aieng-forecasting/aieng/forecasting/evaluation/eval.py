@@ -370,7 +370,7 @@ def evaluate(
 
     Examples
     --------
-    >>> result = evaluate(predictor=ARIMAPredictor(), spec=spec, data_service=svc)
+    >>> result = evaluate(predictor=my_predictor, spec=spec, data_service=svc)
     >>> print(f"Eval mean CRPS: {result.mean_crps:.4f}")
     """
     runs_used = tracker.runs_for(spec.spec_id) if tracker is not None else 0

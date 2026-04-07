@@ -1,3 +1,87 @@
+## Apr 7, 2026 — Implementations architecture: follow-up decisions [Ethan & Agent]
+
+### Decided: remove `darts_arima.py`
+
+The standalone `implementations/economic_forecasting/predictors/darts_arima.py`
+is redundant now that `predictor_template.py` fills the "copy this to write
+your own" role and the demo notebook shows the full implementation inline.
+Keeping both creates a maintenance tax (two copies of the same code to keep
+in sync) and a decision burden for participants ("which file do I start from?").
+
+**Decision:** delete `darts_arima.py`. The pair of `predictor_template.py`
+(starting point) + inline notebook definition (working demonstration) is
+the clean, non-overlapping split.
+
+When experiment scripts need an importable predictor, add the `.py` file at
+that point with clear purpose — not speculatively.
+
+### Decided: no mid-level `implementations/predictors/` layer yet
+
+A top-level `implementations/predictors/` (method implementations not tied
+to any use case) is the right model *once* the same predictor is needed in
+two different use-case folders. That duplication hasn't appeared yet.
+**Decision:** don't create the middle layer until there's a concrete reason.
+Apply the same "two concrete instances before abstracting" rule used
+everywhere else.
+
+### Noted: agent backbone belongs in the package
+
+When agentic predictors are built, the ADK setup, tool definitions, and
+prompt scaffolding are reusable infrastructure — not use-case demonstrations.
+Those should live in `aieng-forecasting` (e.g. `aieng/forecasting/agents/`),
+while task-specific agent configuration lives in `implementations/`. This is
+a cleaner cut than a mid-level `implementations/` layer for that case.
+
+---
+
+## Apr 7, 2026 — Lift predictors to implementations [Agent]
+
+### What changed
+
+**Architectural decision:** the `aieng-forecasting` package now owns zero
+concrete predictor implementations. Darts ships models; the package ships
+the interface. Reference implementations of how to use those models with
+our `Predictor` ABC belong in `implementations/`, visible to bootcamp
+participants in the same place as the notebooks and experiments.
+
+**Deleted from the package:**
+- `aieng-forecasting/aieng/forecasting/evaluation/predictors/arima.py`
+- `aieng-forecasting/aieng/forecasting/evaluation/predictors/__init__.py`
+- `ARIMAPredictor` removed from `evaluation/__init__.py` exports
+
+**New files in `implementations/economic_forecasting/`:**
+- `predictors/darts_arima.py` — `DartsAutoARIMAPredictor`, the moved
+  implementation renamed to make the Darts dependency explicit
+- `predictors/predictor_template.py` — annotated last-value naive baseline;
+  the "start here" file for a participant writing their first predictor
+- `README.md` — use case description, learning path, and interface reference
+
+**Updated:**
+- `cpi_backtest_demo.ipynb` — predictor now defined inline in the notebook
+  (identical to `predictors/darts_arima.py`) so participants see the full
+  implementation in the linear flow
+- `technical-design.md` — package structure diagram updated; predictor
+  placement principle documented
+- Docstrings in `backtest.py` and `eval.py` no longer reference
+  `ARIMAPredictor` by name
+
+No test changes required — all tests use a locally-defined `ConstantPredictor`.
+74 tests, `make lint` clean.
+
+### Decisions made
+
+- **Package = infrastructure only.** `Predictor` ABC + evaluation engines +
+  data layer. No concrete implementations.
+- **Darts predictors are not wrapped once and packaged.** The pattern of
+  "here is how you wrap a Darts model in 20 lines" is demonstrated in
+  `implementations/`, not encoded as a library class.
+- **Agentic predictor backbone (future).** When we build ADK-based
+  forecasting agents, the agent definition/tooling will live in the
+  package (since it's genuinely reusable infrastructure). The task-specific
+  configuration and experiments will live in `implementations/`.
+
+---
+
 ## Apr 3, 2026 (session 4) — Faithfulness review: all TODOs resolved [Agent]
 
 All 11 items from the session 3 audit were fixed in this session. Summary:

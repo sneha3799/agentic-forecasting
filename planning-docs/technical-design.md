@@ -41,8 +41,15 @@ aieng-forecasting/aieng/forecasting/
 └── evaluation/             # ForecastingTask, Predictor ABC, Prediction types, backtest + eval engines
     ├── backtest.py         # BacktestSpec, BacktestResult, backtest(), shared run_eval_loop + _compute_origins
     ├── eval.py             # EvalSpec, EvalResult, EvalTracker, EvalBudgetExceededError, evaluate()
-    └── predictors/         # ARIMAPredictor (reference baseline)
+    ├── prediction.py       # ContinuousForecast, Prediction, STANDARD_QUANTILES
+    ├── predictor.py        # Predictor ABC — the interface all forecasting models must implement
+    └── task.py             # ForecastingTask
 ```
+
+**Concrete predictor implementations do not live in this package.** The
+package exports only the `Predictor` ABC and evaluation infrastructure.
+Reference implementations of predictors live in `implementations/` alongside
+the use-case notebooks and experiments that demonstrate them.
 
 Tests mirror the package under `aieng-forecasting/tests/aieng/forecasting/`.
 

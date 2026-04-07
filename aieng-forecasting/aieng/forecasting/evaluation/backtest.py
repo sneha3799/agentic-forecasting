@@ -337,7 +337,7 @@ def backtest(
 
     Examples
     --------
-    >>> results = backtest(predictor=ARIMAPredictor(), spec=spec, data_service=svc)
+    >>> results = backtest(predictor=my_predictor, spec=spec, data_service=svc)
     >>> print(f"Mean CRPS: {results.mean_crps:.4f}")
     """
     predictions, scores, skipped = run_eval_loop(
