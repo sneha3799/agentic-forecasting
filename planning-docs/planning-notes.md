@@ -1,3 +1,16 @@
+## Apr 10, 2026 - Dataset updates [Ethan]
+
+After some review, these are the datasets we are planning to support:
+
+Dataset Name,Description,Data Access URL,Terms of Use URL,Data Access,Access Conditions,Comments
+New York ISO Energy Data,Energy market price and system load data from New York's independent system operator. Load data are available down to 5-minute windows across ~11 geographic regions.,https://www.nyiso.com/load-data,https://www.nyiso.com/legal-notice,CSV download,None apparent for data files (no warranty),Need to frame a reference prediction task and collect relevant data.
+Statistics Canada,"Official statistical data related to population, resources, economy, society, and culture.",https://www.statcan.gc.ca/en/developers,https://www.statcan.gc.ca/en/terms-conditions/open-licence,Various methods,None apparent,Has been quite reliable in the past. 
+FRED,US and international economic data.,https://fred.stlouisfed.org/docs/api/fred/,https://fred.stlouisfed.org/docs/api/terms_of_use.html,API w/ key,"Attribution requirement, API Key",Has been quite reliable in the past. 
+yfinance,Financial and market data from Yahoo! finance.,https://github.com/ranaroussi/yfinance,https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apiforydn/index.html,Python SDK,"Rate limited, attribution requirement",Is real-time access (as opposed to bulk download for backtesting) reliable?
+ForecastBench,"ForecastBench is a dynamic, continuously-updated benchmark designed to measure the accuracy of ML systems on a constantly changing set of forecasting questions. Data and questions are sourced from multiple real-world data sources and platforms, including FRED, Yahoo Finance, Metaculus, and Rand Forecasting.",https://www.forecastbench.org/datasets/,https://github.com/forecastingresearch/forecastbench-datasets,Direct download from official site and project GitHub,CC-BY-SA-4.0 license -- attribution required,This dataset can probably supercede Metaculus for the bootcamp since it includes questions from Metaculus and other sources in a very convenient format.
+
+In particular, ForecastBench looks like a way better / more convenient way to explore discrete/world event predictions. They provide convenient ways to access historical and current questions and resolutions. You can even access past predictions. Wow! That could be amazing for solution development... Lots of ideas -- can an agent learn to use (published!) past predictions and resolutions for ICL? For finetuning? Does it improve anything? I'm also thinking along the lines of being able to backtest/simulate/learn different ways an agent could form and test hypotheses, learn from resolution feedback, etc. Of course we don't need to build any of that right now, but I'd like to record the basic idea as it relates to other planned work.
+
 ## Apr 9, 2026 — Implementations layer restructure: methods / experiments split [Agent]
 
 ### What changed
