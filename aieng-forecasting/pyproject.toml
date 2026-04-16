@@ -32,6 +32,7 @@ dependencies = [
     "statsforecast>=2.0.0",
     "properscoring>=0.1",
     "fredapi>=0.5.2",
+    "python-dotenv>=1.2.2",
 ]
 
 [tool.hatch.build.targets.sdist]

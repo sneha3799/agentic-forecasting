@@ -33,7 +33,13 @@ import sys
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+
+# Load .env from repo root before anything else so FRED_API_KEY is available.
+from dotenv import load_dotenv
+
+load_dotenv(REPO_ROOT / ".env")
 
 from aieng.forecasting.data import DataService, SeriesMetadata
 from aieng.forecasting.data.adapters import FREDAdapter
@@ -90,12 +96,6 @@ FRED_SERIES: list[tuple[str, str, str, str]] = [
         "fred_sp100_volatility_vxo",
         "VXOCLS",
         "CBOE S&P 100 Volatility Index (VXO), daily close (monthly avg in FRED)",
-        "Index",
-    ),
-    (
-        "fred_wilshire_5000",
-        "WILL5000IND",
-        "Wilshire 5000 Total Market Full Cap Index",
         "Index",
     ),
 ]

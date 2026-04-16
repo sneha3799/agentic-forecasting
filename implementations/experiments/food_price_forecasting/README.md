@@ -38,7 +38,6 @@ The following FRED series can be used as past covariates by predictors that supp
 | `fred_canada_10yr_bond_yield` | IRLTLT01CAM156N | Canada 10-year government bond yield |
 | `fred_canada_us_exchange_rate` | EXCAUS | Canada/US exchange rate (CAD per USD) |
 | `fred_sp100_volatility_vxo` | VXOCLS | S&P 100 Volatility Index (VXO) |
-| `fred_wilshire_5000` | WILL5000IND | Wilshire 5000 Total Market Index |
 
 **Note:** FRED requires an API key. Set `FRED_API_KEY` in `.env` before running `scripts/fetch_fred.py`.
 
