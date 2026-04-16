@@ -1,3 +1,48 @@
+## Apr 16, 2026 — CFPR reference experiment + multi-target eval framework [Ethan & Agent]
+
+### Work completed
+
+**Framework: multi-target evaluation support** (`aieng-forecasting`)
+- Added `MultiTargetBacktestSpec` and `multi_backtest()` to `evaluation/backtest.py`: groups N `ForecastingTask`s under shared window parameters; returns `dict[task_id, BacktestResult]`. Validates that all tasks share the same `frequency`.
+- Added `MultiTargetEvalSpec` and `multi_evaluate()` to `evaluation/eval.py`: budget-controlled multi-task eval where a single `multi_evaluate()` call consumes exactly one run from the `EvalTracker` budget regardless of task count. This is the correct semantics — the budget controls how many times you can "peek" at the held-out window, not how many series you evaluate at once.
+- 22 new tests covering construction, validation, result structure, and budget enforcement for all multi-target paths.
+
+**Data: FREDAdapter + covariate fetch script**
+- New `FREDAdapter` (wraps `fredapi`) in `aieng/forecasting/data/adapters/fred.py`. Reads API key from `FRED_API_KEY` env var. Sets `released_at = timestamp` (acknowledged limitation — FRED doesn't expose vintage dates via `fredapi`; noted in module docstring for future refinement).
+- `scripts/fetch_fred.py`: fetches 6 FRED macro covariates for food price forecasting — US CPI food at home, US CPI meats/poultry/fish/eggs, US CPI fruits/vegetables, Canada 10-year bond yield, CAD/USD exchange rate, S&P 100 VXO. Wilshire 5000 (`WILL5000IND`) removed after FRED returned 400.
+- `scripts/fetch_cpi.py`: added 4 missing food CPI categories (fish/seafood, fruit preparations and nuts, other food and non-alcoholic beverages, vegetables and vegetable preparations), completing the 9-series CFPR target set.
+- `python-dotenv` added as a dependency; `fetch_fred.py` now calls `load_dotenv()` at startup so `FRED_API_KEY` is loaded from the repo-root `.env` without requiring a shell export.
+
+**Methods: `DartsAutoARIMAPredictor` promoted to shared module**
+- Moved from an inline notebook definition to `implementations/methods/darts_arima.py`.
+- Extended with optional `covariate_series_ids: list[str]`; when provided the predictor fetches those series from `ForecastContext`, aligns them to the target grid, and passes them as `past_covariates` to Darts `AutoARIMA`.
+- `cpi_backtest_demo.ipynb` updated to import from the new module.
+
+**Reference specs: `reference_specs/food_cpi/`**
+- Four YAML files: `food_cpi_18m_backtest.yaml`, `food_cpi_18m_eval.yaml`, `food_cpi_3m_backtest.yaml`, `food_cpi_3m_eval.yaml`.
+- Each covers all 9 food CPI target series.
+- Two-horizon design rationale: 18-month horizon replicates the original CFPR experiment; 3-month horizon is added to provide a denser eval window (more resolvable origins within recent history) without going too far back in time.
+
+**Experiment notebooks: `implementations/experiments/food_price_forecasting/`**
+- `food_data_exploration.ipynb`: registers all StatCan food CPI series and FRED covariates, inspects date ranges, plots historical series, computes cross-correlations.
+- `food_cpi_18m_experiment.ipynb`: `multi_backtest` over 18-month horizon for `LastValuePredictor` and `DartsAutoARIMAPredictor` (with and without covariates); CRPS comparison table; post-hoc MAPE computed from median forecast; `multi_evaluate` against `food_cpi_18m_eval.yaml`; YoY % change derivation.
+- `food_cpi_3m_experiment.ipynb`: same structure at 3-month horizon; section contrasting eval-density advantage over the 18-month experiment.
+
+### Key decisions
+
+- **Multi-target eval budget counts sessions, not series.** One `multi_evaluate()` call = one budget run. This is the right abstraction — experiments with many correlated targets shouldn't penalise users for grouping them together.
+- **Exogenous covariates are included now.** They are core to the CFPR experiment design and the `DartsAutoARIMAPredictor` covariate pathway is the pattern future predictors should follow.
+- **MAPE is post-hoc / notebook-only.** Not a first-class metric in the eval framework; computed in the analysis notebook from median forecast outputs. CRPS remains the primary scoring rule.
+- **Raw CPI index is the forecast target.** YoY % change is derived at reporting time from the index forecasts — not baked into the `ForecastingTask` target definition.
+- **One directory, two notebooks** for the two horizons. They share the same data setup and predictor imports; the horizon difference is entirely in the loaded YAML spec.
+- **`WILL5000IND` removed.** FRED returns 400 for this series ID. The S&P 100 VXO (`VXOCLS`) is sufficient as a market-uncertainty proxy.
+
+### Commits
+- `9f4f31a` — `feat(cfpr)`: main delivery (23 files, +4424/−1248)
+- `c412abe` — `fix(fetch_fred)`: load `.env`, drop invalid `WILL5000IND`
+
+---
+
 ## Apr 14, 2026 — Sprint 1 planning: team assignments and new tasks [Ethan & Agent]
 
 ### Owner assignments
