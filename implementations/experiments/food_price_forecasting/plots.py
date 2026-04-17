@@ -152,7 +152,11 @@ def plot_trajectory_fan(
         ax.legend(fontsize=8, loc="upper left")
 
     label = CATEGORY_LABELS.get(category_id, category_id)
-    fig.suptitle(f"{label} ({category_id}) — forecast trajectories, {len(recent_origins)} most recent origins", fontsize=11, y=1.01)
+    fig.suptitle(
+        f"{label} ({category_id}) — forecast trajectories, {len(recent_origins)} most recent origins",
+        fontsize=11,
+        y=1.01,
+    )
     fig.tight_layout()
     return fig, axes
 
@@ -200,7 +204,12 @@ def plot_avgyoy_grid(
         label = CATEGORY_LABELS.get(series_id, series_id)
 
         df_any = next(
-            (df for pid_dict in yoy_by_predictor_by_task.values() for (tid, df) in pid_dict.items() if tid == task_id and not df.empty),
+            (
+                df
+                for pid_dict in yoy_by_predictor_by_task.values()
+                for (tid, df) in pid_dict.items()
+                if tid == task_id and not df.empty
+            ),
             None,
         )
         if df_any is None:
@@ -209,7 +218,16 @@ def plot_avgyoy_grid(
             continue
 
         years = df_any["origin_year"] + 1
-        ax.plot(years, df_any["actual_yoy"] * 100, color="k", linewidth=1.8, marker="o", markersize=4, label="Actual", zorder=5)
+        ax.plot(
+            years,
+            df_any["actual_yoy"] * 100,
+            color="k",
+            linewidth=1.8,
+            marker="o",
+            markersize=4,
+            label="Actual",
+            zorder=5,
+        )
 
         for pid in predictor_ids:
             df = yoy_by_predictor_by_task[pid].get(task_id)
@@ -232,7 +250,7 @@ def plot_avgyoy_grid(
         axes_flat[0].legend(fontsize=7, loc="best")
 
     # Hide any unused panels.
-    for ax in axes_flat[len(task_ids):]:
+    for ax in axes_flat[len(task_ids) :]:
         ax.axis("off")
 
     fig.suptitle("Avg/avg YoY predictions vs actuals — all 9 food CPI categories", fontsize=12)

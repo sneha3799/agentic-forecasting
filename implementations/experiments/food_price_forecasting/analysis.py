@@ -128,9 +128,7 @@ def compute_avgyoy(
         actual_avg_y0 = float(y0_vals.mean())
 
         traj_preds = [
-            p
-            for p in result.predictions
-            if p.as_of == origin and pd.Timestamp(p.forecast_date).year == next_year
+            p for p in result.predictions if p.as_of == origin and pd.Timestamp(p.forecast_date).year == next_year
         ]
         if not traj_preds:
             continue
@@ -221,10 +219,9 @@ def compute_mape(
     for pid, task_results in results_by_predictor.items():
         for tid, result in task_results.items():
             actual_df = data_service.get_series(result.spec.task.target_series_id, as_of=as_of)
-            actual_long = (
-                actual_df.assign(forecast_date=pd.to_datetime(actual_df["timestamp"]))
-                .rename(columns={"value": "actual"})[["forecast_date", "actual"]]
-            )
+            actual_long = actual_df.assign(forecast_date=pd.to_datetime(actual_df["timestamp"])).rename(
+                columns={"value": "actual"}
+            )[["forecast_date", "actual"]]
             preds_df = predictions_to_dataframe(result, predictor_id=pid, task_id=tid)
             merged = preds_df.merge(actual_long, on="forecast_date", how="inner")
             if merged.empty:

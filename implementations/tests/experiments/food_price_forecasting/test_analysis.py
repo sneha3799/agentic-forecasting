@@ -350,10 +350,14 @@ class TestSummarizeCRPS:
 
         assert "naive" in board.columns
         assert set(board.index) - {"MEAN"} == {"cpi_food_overall", "cpi_meat"}
-        assert board.loc["MEAN", "naive"] == (
-            results_by_predictor["naive"]["cpi_food_overall"].mean_crps
-            + results_by_predictor["naive"]["cpi_meat"].mean_crps
-        ) / 2
+        assert (
+            board.loc["MEAN", "naive"]
+            == (
+                results_by_predictor["naive"]["cpi_food_overall"].mean_crps
+                + results_by_predictor["naive"]["cpi_meat"].mean_crps
+            )
+            / 2
+        )
 
 
 class TestRationalesTable:

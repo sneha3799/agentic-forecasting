@@ -65,8 +65,8 @@ from aieng.forecasting.evaluation.eval import EvalResult, MultiTargetEvalSpec
 from aieng.forecasting.evaluation.predictor import Predictor
 
 
+#: Default store location, relative to the caller's working directory.
 DEFAULT_STORE_DIR = Path("data/predictions")
-"""Default store location, relative to the caller's working directory."""
 
 
 # ---------------------------------------------------------------------------
