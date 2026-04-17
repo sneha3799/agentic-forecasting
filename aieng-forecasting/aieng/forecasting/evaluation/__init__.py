@@ -1,5 +1,16 @@
 """Evaluation harness: forecasting tasks, prediction payloads, and scoring."""
 
+from aieng.forecasting.evaluation.artifacts import (
+    DEFAULT_STORE_DIR,
+    cached_backtest,
+    cached_multi_backtest,
+    load_backtest_result,
+    load_multi_backtest_results,
+    save_backtest_result,
+    save_eval_result,
+    save_multi_backtest_results,
+    save_multi_eval_results,
+)
 from aieng.forecasting.evaluation.backtest import (
     BacktestResult,
     BacktestSpec,
@@ -7,6 +18,7 @@ from aieng.forecasting.evaluation.backtest import (
     backtest,
     multi_backtest,
 )
+from aieng.forecasting.evaluation.describe import describe_spec, describe_task
 from aieng.forecasting.evaluation.eval import (
     EvalBudgetExceededError,
     EvalResult,
@@ -22,6 +34,7 @@ from aieng.forecasting.evaluation.task import ForecastingTask
 
 
 __all__ = [
+    "DEFAULT_STORE_DIR",
     "BacktestResult",
     "BacktestSpec",
     "ContinuousForecast",
@@ -36,7 +49,17 @@ __all__ = [
     "Predictor",
     "STANDARD_QUANTILES",
     "backtest",
+    "cached_backtest",
+    "cached_multi_backtest",
+    "describe_spec",
+    "describe_task",
     "evaluate",
+    "load_backtest_result",
+    "load_multi_backtest_results",
     "multi_backtest",
     "multi_evaluate",
+    "save_backtest_result",
+    "save_eval_result",
+    "save_multi_backtest_results",
+    "save_multi_eval_results",
 ]
