@@ -137,6 +137,32 @@ The core research question: does fine-tuning a small open model (Gemma 4 via Uns
 
 ---
 
+### Energy Commodity Prices Reference Experiment
+
+**Owner:** TBD
+**Dependencies:** yfinance adapter (Behnoosh's S&P500 work establishes the pattern); daily frequency handling verified in the backtest engine
+**Decision date:** Apr 20, 2026
+
+A reference experiment on crude oil and gasoline prices using daily financial data. The central motivating idea: crude oil futures embed a market-consensus forward curve as a first-class covariate, making this an unusually sharp head-to-head setup. At any prediction horizon, a futures contract at that maturity *is* the market's own forecast. Any model that consistently adds something on top of that is making a real claim.
+
+**Prediction targets:**
+- Primary: WTI crude oil spot (FRED `DCOILWTICO`)
+- Secondary: RBOB gasoline front-month futures (yfinance `RB=F`)
+
+**Horizons:** 5 trading days (≈ 1 week), 21 trading days (≈ 1 month, aligns with front-month futures), 63 trading days (≈ 3 months)
+
+**Key covariates:** WTI futures term structure at 1m/2m/3m maturities (yfinance), Brent crude spot (FRED `DCOILBRENTEU`), EIA weekly crude inventories (FRED `WCRSTUS1`), USD trade-weighted index (FRED `DTWEXBGS`), CAD/USD (FRED `DEXCAUS`)
+
+**Backtesting design:** Monthly origins, first trading day of each month, 2010–2024 window (covers OPEC 2014–16 production war, 2020 COVID collapse, 2022 Russia/Ukraine spike). Evaluation window: 2023–2025.
+
+**Deliverables:** yfinance adapter (or verify existing), `scripts/fetch_energy.py`, `reference_specs/energy_prices/`, demo notebook under `implementations/experiments/energy_prices/` with WTI spot as primary target and the futures front-month contract as a "market baseline" predictor.
+
+**Note on NYISO:** This experiment complements rather than replaces NYISO (hourly electricity load/price are distinct from commodity spot/futures). Relative prioritization versus the NYISO item to be decided at the next sprint planning session.
+
+**Connection to existing work:** Completes the price transmission chain: WTI crude (this experiment) → RBOB futures (this experiment) → CPI gasoline (already in `getting_started`). `DCOILWTICO` and `DEXCAUS` were already fetched as CFPR covariate candidates; data infrastructure is largely in place.
+
+---
+
 ### NYISO Reference Experiment *(Behnoosh, after S&P500)*
 
 **Owner:** Behnoosh
@@ -181,6 +207,27 @@ Open sub-questions:
 Output of the session should be a short ADR-style writeup in
 `planning-docs/` plus an entry moved out of this holding queue into an
 active task.  Timebox: a single deep-dive session (2-3h) with one artifact.
+
+---
+
+### Extended Agent Capabilities: Simulation, Monitoring, and Scenario Analysis *(Track 2 — design session)*
+
+**Theme:** Agent architecture
+**Dependencies:** Track 1 frontier agent (Ali) working end-to-end
+**Deferred from:** Apr 20, 2026 strategy session
+
+The two-track framing (see planning-notes Apr 20, 2026) distinguishes head-to-head evaluation (Track 1) from extended agent capabilities (Track 2). This item captures the Track 2 design work.
+
+Track 2 covers things agents can do that conventional methods structurally cannot:
+
+- **Simulation / experiments:** running parametric what-if analyses (e.g., "if oil prices stay elevated through Q3, what should we expect for baked goods by Q1 next year?")
+- **Monitoring:** continuously watching information sources and issuing updated predictions as new signals arrive
+- **Open-ended Q&A:** answering questions about forecasts, explaining uncertainty, identifying related risks
+- **Scenario analysis:** modelling alternative futures with explicit assumptions
+
+The evaluation methodology for these tasks is a genuine open problem — it will not reduce to CRPS or Brier score on a standard backtest window. That is the central design challenge for this session.
+
+Output: an ADR-style writeup in `planning-docs/` plus a stub experiment folder (`implementations/experiments/extended_capabilities/` or similar) with a README that sketches the first concrete task type and how it might be evaluated.
 
 ---
 
