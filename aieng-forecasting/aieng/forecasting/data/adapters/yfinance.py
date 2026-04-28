@@ -29,9 +29,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 from aieng.forecasting.data.adapters.base import BaseAdapter
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 YFinanceField = Literal["Open", "High", "Low", "Close", "Adj Close", "Volume"]
