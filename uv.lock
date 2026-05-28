@@ -83,13 +83,13 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "codecov", specifier = ">=2.1.13" },
-    { name = "e2b", specifier = ">=2.23.1" },
+    { name = "e2b", specifier = ">=2.25.0" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "nbqa", specifier = ">=1.9.1" },
     { name = "pip-audit", specifier = ">=2.10.0" },
     { name = "pre-commit", specifier = ">=4.6.0" },
     { name = "pytest", specifier = ">=9.0.3" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
     { name = "ruff", specifier = ">=0.15.14" },
@@ -177,10 +177,10 @@ requires-dist = [
     { name = "fredapi", specifier = ">=0.5.2" },
     { name = "google-adk", marker = "extra == 'agentic'", specifier = ">=2.0.0" },
     { name = "google-cloud-storage", marker = "extra == 'agentic'", specifier = ">=2.18,<4" },
-    { name = "langfuse", marker = "extra == 'agentic'", specifier = ">=4.5.1" },
-    { name = "langfuse", marker = "extra == 'llm'", specifier = ">=4.5.1" },
+    { name = "langfuse", marker = "extra == 'agentic'", specifier = ">=4.7.0" },
+    { name = "langfuse", marker = "extra == 'llm'", specifier = ">=4.7.0" },
     { name = "lightgbm", marker = "extra == 'numerical'", specifier = ">=4.6.0" },
-    { name = "litellm", marker = "extra == 'llm'", specifier = ">=1.85.0" },
+    { name = "litellm", marker = "extra == 'llm'", specifier = ">=1.86.2" },
     { name = "openinference-instrumentation-google-adk", marker = "extra == 'agentic'", specifier = ">=0.1.11" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "properscoring", specifier = ">=0.1" },
@@ -195,7 +195,7 @@ provides-extras = ["agentic", "llm", "numerical"]
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=9.0.3" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
 ]
@@ -1184,7 +1184,7 @@ wheels = [
 
 [[package]]
 name = "e2b"
-version = "2.23.1"
+version = "2.25.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -1199,9 +1199,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "wcmatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/77/cfa10767468bc338a30f3776a75040c69033eaaf64e6eed4268d5470f477/e2b-2.23.1.tar.gz", hash = "sha256:ce8cfd388c2e4f8a9467cc363000746b68ecf7d48d9e6af5f81ad7e6d4756bce", size = 157359, upload-time = "2026-05-22T19:46:41.721Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/d8/22497584cdf870be989c97cb2727acf4f1e66700150c5b86ddd8b01e1107/e2b-2.25.0.tar.gz", hash = "sha256:315ef1e45b4e60d66c7c271820f85ae5c5c2bad2ee66eaad2c98ca30a028f83b", size = 162662, upload-time = "2026-05-27T21:33:39.645Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/8f/36c314f838ce2f5ecec6843ae058248998448cb3b5f962ba428a441755bb/e2b-2.23.1-py3-none-any.whl", hash = "sha256:55a7d2d51b091a21a972eb4a284170bf8c0fd1a1564c44eaea8f2cd0b1195e9d", size = 297454, upload-time = "2026-05-22T19:46:39.819Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/cf/6488ebf694548702f28d409e865f3bc8d2a450d95f13038baa4fbdd65a60/e2b-2.25.0-py3-none-any.whl", hash = "sha256:1021eebb74ab06166f6f8a551d9667af141711bdedfbb682197d670409e38fd5", size = 308999, upload-time = "2026-05-27T21:33:38.202Z" },
 ]
 
 [[package]]
@@ -2401,7 +2401,7 @@ wheels = [
 
 [[package]]
 name = "langfuse"
-version = "4.6.1"
+version = "4.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backoff" },
@@ -2413,9 +2413,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/31/4b7157be23e7c8c3581ac5f6547c5c003e232e7044c92398c468ef78a809/langfuse-4.6.1.tar.gz", hash = "sha256:7f256c669e610909c2e93ca3e9e4168dbef344b753b6874f14b0edd673863f17", size = 281379, upload-time = "2026-05-08T14:08:15.909Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/80/0bd2ed8f781905d8e4c8f69e72fd06d914c907f31a3074449d20f8964c78/langfuse-4.7.0.tar.gz", hash = "sha256:7b592a251777dae44f76db7971871ff16c4c200d490cb5cd4e2f3822a1d593ec", size = 282543, upload-time = "2026-05-27T18:51:01.521Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/bf/3a6082f7809bdcc1269e9920c07d7c7f92a53cc265a4a879e59c92b23b36/langfuse-4.6.1-py3-none-any.whl", hash = "sha256:a696ac3089a0c8431bf7f1b47b7f6417da311f418dd04ce9ef62d63608fd8797", size = 481237, upload-time = "2026-05-08T14:08:17.141Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/13/9a2304f546c74bc2bfc4765adb1e6f6a0984ead671fa65c3edcf9d473b58/langfuse-4.7.0-py3-none-any.whl", hash = "sha256:72ca668ce0999d05c787ccbfa313b679b99b3492e268d351549488822dd40c34", size = 482420, upload-time = "2026-05-27T18:50:59.773Z" },
 ]
 
 [[package]]
@@ -2509,7 +2509,7 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.86.0"
+version = "1.86.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2525,9 +2525,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2f/a7/26b8b04e4fcff26b60200ffe7458a255552ae51014468188f5db45674eb2/litellm-1.86.0.tar.gz", hash = "sha256:eccab86e0820b60b3f9484b233fb8d818b97afb19d5b4fa08d0d045621350ba4", size = 15379195, upload-time = "2026-05-24T02:42:10.865Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/ee/1f6f3f5d01e0910629b6af3757e82c47b8b87dca497a661a9c63280b4bd8/litellm-1.86.2.tar.gz", hash = "sha256:7d559ad48b97d796ff325af88fd7eebbdc66e58773fb5312130ab1cac968f8f3", size = 15380548, upload-time = "2026-05-27T16:19:58.45Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/0b/9a044c061a69e801de042e962c34f5bc2e094810e28b49ce0b3bedee9327/litellm-1.86.0-py3-none-any.whl", hash = "sha256:9d8171ca1a17705b7c7a6fdce8cfc07bbf641284b46c1b6047f83a779159990c", size = 17011225, upload-time = "2026-05-24T02:42:00.629Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/37/4da1dd67157aaa11477d6c63e4725216bfc46b4661e581b490d17e5b2831/litellm-1.86.2-py3-none-any.whl", hash = "sha256:27096463be7add661513ada3d9039e8f1a6195859e604d30fde96c939efe0a03", size = 17013061, upload-time = "2026-05-27T16:19:53.219Z" },
 ]
 
 [[package]]
@@ -3047,7 +3047,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "google-adk", specifier = ">=2.0.0" },
-    { name = "langfuse", specifier = ">=4.5.1" },
+    { name = "langfuse", specifier = ">=4.7.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
@@ -4162,15 +4162,15 @@ wheels = [
 
 [[package]]
 name = "pytest-asyncio"
-version = "1.3.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", hash = "sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5", size = 50087, upload-time = "2025-11-10T16:07:47.256Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/7c/d36d04db312ecf4298932ef77e6e4a9e8ad017906e24e34f0b0c361a2473/pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42", size = 58514, upload-time = "2026-05-26T09:56:04.083Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", hash = "sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5", size = 15075, upload-time = "2025-11-10T16:07:45.537Z" },
+    { url = "https://files.pythonhosted.org/packages/03/e2/08a497ef684b88559c9cc5f4ad53a37e7b99e727094a86d6ea32536d5d3c/pytest_asyncio-1.4.0-py3-none-any.whl", hash = "sha256:933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1", size = 16930, upload-time = "2026-05-26T09:56:02.576Z" },
 ]
 
 [[package]]
