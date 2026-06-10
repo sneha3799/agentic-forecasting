@@ -8,6 +8,8 @@ caller can further customise or save the figure.
 
 from __future__ import annotations
 
+from typing import Literal
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.axes import Axes
@@ -48,21 +50,29 @@ def plot_policy_rate_with_decisions(
     event_df: pd.DataFrame,
     *,
     start: pd.Timestamp | None = None,
+    kind: Literal["auto", "event", "direction"] = "auto",
 ) -> tuple[Figure, Axes]:
     """Plot the daily target rate with each announcement marked by its outcome.
 
-    Cuts are red down-triangles, holds/hikes are light grey dots — the visual
-    motivation for the whole experiment: cuts are rare and strongly clustered
-    into easing cycles.
+    Accepts either the binary cut-event series (0/1, where 1 means cut) or the
+    ordered direction series (-1/0/+1, where -1 means cut, 0 hold, +1 hike).
+    Cuts are red down-triangles, hikes are dark-teal up-triangles, and holds
+    are light grey dots.
 
     Parameters
     ----------
     rate_df : pd.DataFrame
         Daily target-rate series (``timestamp`` / ``value`` columns).
     event_df : pd.DataFrame
-        Per-meeting 0/1 event series.
+        Per-meeting outcome series: 0/1 cut events or -1/0/+1 directions.
     start : pd.Timestamp or None
         Optional left cutoff for the x-axis.
+    kind : {"auto", "event", "direction"}
+        Which series modality ``event_df`` holds. ``"auto"`` treats values
+        outside ``{0, 1}`` as the direction series — correct for full
+        histories, but a direction series windowed to holds and hikes only
+        is indistinguishable from a 0/1 event series, so pass the modality
+        explicitly when plotting slices.
 
     Returns
     -------
@@ -81,17 +91,38 @@ def plot_policy_rate_with_decisions(
     fig, ax = plt.subplots(figsize=(13, 4.5))
     ax.plot(rate["timestamp"], rate["value"], color="k", linewidth=1.4, label="Target rate", zorder=3)
 
-    for outcome, marker, color, size, label in [
-        (0, "o", "#bbbbbb", 18, "Hold / hike"),
-        (1, "v", "#d62728", 55, "Cut"),
-    ]:
-        sub = events[events["value"] == outcome]
-        # Rate level at (or just before) each meeting, for marker placement.
-        levels = [
-            float(rate_by_date[rate_by_date.index <= ts].iloc[-1]) if (rate_by_date.index <= ts).any() else None
-            for ts in sub["timestamp"]
+    if kind == "auto":
+        observed_values = set(events["value"].dropna().astype(float))
+        direction_series = bool(observed_values - {0.0, 1.0})
+    else:
+        direction_series = kind == "direction"
+    marker_specs = (
+        [
+            (-1.0, "v", "#d62728", 55, "Cut"),
+            (0.0, "o", "#bbbbbb", 18, "Hold"),
+            (1.0, "^", "#1b7a76", 55, "Hike"),
         ]
-        ax.scatter(sub["timestamp"], levels, marker=marker, s=size, color=color, label=label, zorder=4)
+        if direction_series
+        else [
+            (0.0, "o", "#bbbbbb", 18, "Hold / hike"),
+            (1.0, "v", "#d62728", 55, "Cut"),
+        ]
+    )
+
+    for outcome, marker, color, size, label in marker_specs:
+        sub = events[events["value"] == outcome]
+        if sub.empty:
+            continue
+        # Rate level at (or just before) each meeting, for marker placement.
+        marker_rows: list[tuple[pd.Timestamp, float]] = []
+        for ts in sub["timestamp"]:
+            eligible_rates = rate_by_date[rate_by_date.index <= ts]
+            if eligible_rates.empty:
+                continue
+            marker_rows.append((ts, float(eligible_rates.iloc[-1])))
+        if marker_rows:
+            timestamps, levels = zip(*marker_rows, strict=True)
+            ax.scatter(timestamps, levels, marker=marker, s=size, color=color, label=label, zorder=4)
 
     ax.set_ylabel("Target for the overnight rate (%)")
     ax.set_title("Bank of Canada target rate with fixed announcement dates by outcome")
@@ -112,12 +143,17 @@ def plot_reliability_curve(
     n_bins: int = 5,
     colors: dict[str, str] | None = None,
     labels: dict[str, str] | None = None,
+    title_suffix: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Draw one reliability curve per predictor against the diagonal.
 
     Points on the diagonal are perfectly calibrated; above it the predictor
     under-predicts the event, below it it over-predicts. Marker size scales
-    with bin population, since with ~120 meetings most bins are thin.
+    with bin population, since with ~120 meetings most bins are thin. For
+    categorical tasks, pass a binary-style one-vs-rest frame from
+    :func:`boc_rate_decisions.analysis.one_vs_rest_frame` and use
+    ``title_suffix`` to identify the category, for example
+    ``"P(cut) one-vs-rest"``.
 
     Parameters
     ----------
@@ -127,6 +163,8 @@ def plot_reliability_curve(
         Number of probability bins (keep small: the sample is ~120 meetings).
     colors, labels : dict[str, str] or None
         Optional predictor_id -> colour / display-label maps.
+    title_suffix : str or None
+        Optional suffix appended to the plot title.
 
     Returns
     -------
@@ -163,9 +201,10 @@ def plot_reliability_curve(
 
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.02)
-    ax.set_xlabel("Mean predicted P(cut)")
-    ax.set_ylabel("Observed cut frequency")
-    ax.set_title(f"Reliability curve ({n_bins} bins; marker size = bin count)")
+    ax.set_xlabel("Mean predicted probability")
+    ax.set_ylabel("Observed frequency")
+    suffix = f": {title_suffix}" if title_suffix else ""
+    ax.set_title(f"Reliability curve{suffix} ({n_bins} bins; marker size = bin count)")
     ax.legend(fontsize=9, loc="upper left")
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -183,11 +222,12 @@ def plot_decision_timeline(
     colors: dict[str, str] | None = None,
     labels: dict[str, str] | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot predicted P(cut) per meeting over time, with realised cuts shaded.
+    """Plot predicted decision probabilities over time, with outcomes shaded.
 
-    Vertical red bands mark meetings where the Bank actually cut. A good
-    predictor's probability rises into easing cycles and stays low through
-    long holds; an uninformative one is a flat line at the base rate.
+    Binary-style frames plot one P(event) line per predictor and shade realised
+    event meetings in red. Categorical frames plot P(cut) as solid lines and
+    P(hike) as dashed lines using the same predictor colour, with realised
+    cuts shaded red and realised hikes shaded teal.
 
     Parameters
     ----------
@@ -203,33 +243,82 @@ def plot_decision_timeline(
     predictor_ids = sorted(predictions_df["predictor_id"].unique())
     color_map = _resolve_colors(predictor_ids, colors)
     label_map = _resolve_labels(predictor_ids, labels)
+    categorical = {"p_cut", "p_hike", "outcome_label"}.issubset(predictions_df.columns) and predictions_df[
+        ["p_cut", "p_hike"]
+    ].notna().any().any()
 
     fig, ax = plt.subplots(figsize=(13, 4.5))
 
-    cut_meetings = sorted(predictions_df.loc[predictions_df["outcome"] == 1, "meeting_date"].unique())
-    for md in cut_meetings:
-        ts = pd.Timestamp(md)
-        ax.axvspan(ts - pd.Timedelta(days=10), ts + pd.Timedelta(days=10), color="#d62728", alpha=0.15, zorder=1)
+    if categorical:
+        cut_meetings = sorted(predictions_df.loc[predictions_df["outcome_label"] == "cut", "meeting_date"].unique())
+        hike_meetings = sorted(predictions_df.loc[predictions_df["outcome_label"] == "hike", "meeting_date"].unique())
+        for md in cut_meetings:
+            ts = pd.Timestamp(md)
+            ax.axvspan(ts - pd.Timedelta(days=10), ts + pd.Timedelta(days=10), color="#d62728", alpha=0.15, zorder=1)
+        for md in hike_meetings:
+            ts = pd.Timestamp(md)
+            ax.axvspan(ts - pd.Timedelta(days=10), ts + pd.Timedelta(days=10), color="#1b7a76", alpha=0.12, zorder=1)
 
-    for pid in predictor_ids:
-        sub = predictions_df[predictions_df["predictor_id"] == pid].sort_values("meeting_date")
-        ax.plot(
-            sub["meeting_date"],
-            sub["probability"],
-            color=color_map[pid],
-            linewidth=1.3,
-            marker="o",
-            markersize=3.5,
-            label=label_map[pid],
-            zorder=3,
+        for pid in predictor_ids:
+            sub = predictions_df[predictions_df["predictor_id"] == pid].sort_values("meeting_date")
+            ax.plot(
+                sub["meeting_date"],
+                sub["p_cut"],
+                color=color_map[pid],
+                linewidth=1.3,
+                marker="o",
+                markersize=3.5,
+                label=label_map[pid],
+                zorder=3,
+            )
+            ax.plot(
+                sub["meeting_date"],
+                sub["p_hike"],
+                color=color_map[pid],
+                linewidth=1.3,
+                linestyle="--",
+                marker="^",
+                markersize=3.5,
+                label=None,
+                zorder=3,
+            )
+
+        ax.set_ylabel("Predicted probability")
+        ax.set_title("Predicted decision probabilities by meeting (solid = P(cut), dashed = P(hike))")
+        handles, handle_labels = ax.get_legend_handles_labels()
+        handles.extend(
+            [
+                Line2D([0], [0], color="#d62728", alpha=0.3, linewidth=8),
+                Line2D([0], [0], color="#1b7a76", alpha=0.25, linewidth=8),
+            ]
         )
+        handle_labels.extend(["Realised cut", "Realised hike"])
+    else:
+        cut_meetings = sorted(predictions_df.loc[predictions_df["outcome"] == 1, "meeting_date"].unique())
+        for md in cut_meetings:
+            ts = pd.Timestamp(md)
+            ax.axvspan(ts - pd.Timedelta(days=10), ts + pd.Timedelta(days=10), color="#d62728", alpha=0.15, zorder=1)
+
+        for pid in predictor_ids:
+            sub = predictions_df[predictions_df["predictor_id"] == pid].sort_values("meeting_date")
+            ax.plot(
+                sub["meeting_date"],
+                sub["probability"],
+                color=color_map[pid],
+                linewidth=1.3,
+                marker="o",
+                markersize=3.5,
+                label=label_map[pid],
+                zorder=3,
+            )
+
+        ax.set_ylabel("Predicted P(cut)")
+        ax.set_title("Predicted cut probability by meeting (red bands = realised cuts)")
+        handles, handle_labels = ax.get_legend_handles_labels()
+        handles.append(Line2D([0], [0], color="#d62728", alpha=0.3, linewidth=8))
+        handle_labels.append("Realised cut")
 
     ax.set_ylim(-0.03, 1.03)
-    ax.set_ylabel("Predicted P(cut)")
-    ax.set_title("Predicted cut probability by meeting (red bands = realised cuts)")
-    handles, handle_labels = ax.get_legend_handles_labels()
-    handles.append(Line2D([0], [0], color="#d62728", alpha=0.3, linewidth=8))
-    handle_labels.append("Realised cut")
     ax.legend(handles, handle_labels, fontsize=9, loc="upper left")
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()

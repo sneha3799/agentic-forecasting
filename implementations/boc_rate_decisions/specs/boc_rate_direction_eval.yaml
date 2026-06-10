@@ -1,12 +1,13 @@
-# BoC Rate Cut Eval Spec — 2025-2026 protected window
+# BoC Rate Direction Eval Spec — 2025-2026 protected window
 #
 # Held-out, budget-controlled evaluation over the 12 BoC fixed announcement
 # dates from January 2025 through June 2026. All 12 are resolved as of
 # June 2026 (the June 10 announcement resolves the final origin).
 #
-# This window contains the tail of the 2024-25 easing cycle (cuts in Jan,
-# Mar, Sep, Oct 2025) followed by an extended hold at 2.25% — a calibration
-# test under regime change, not just event detection.
+# This window contains cuts and holds but NO hikes, so it cannot reward hike
+# discrimination. That is acceptable for this protected slice because RPS
+# handles absent categories while still scoring calibrated mass over the full
+# ordered support.
 #
 # Use this spec sparingly. max_runs: 5 limits how many times a participant
 # may run evaluate() against it, reducing the risk of inadvertently
@@ -15,25 +16,29 @@
 # Origins are explicit (announcement_date - 1 day) because BoC meetings are
 # an irregular calendar; derived from ../meeting_schedule.yaml.
 
-spec_id: boc_rate_cut_eval_2025_2026
+spec_id: boc_rate_direction_eval_2025_2026
 
 description: >-
   Protected eval across the 12 BoC fixed announcement dates from January
   2025 through June 2026. At each origin (announcement date minus one day)
-  predictors emit P(rate cut at tomorrow's announcement), scored with the
-  Brier score. Budget-limited to 5 runs per participant tracker.
+  predictors emit probabilities over cut, hold, and hike, scored with RPS.
+  Budget-limited to 5 runs per participant tracker.
 
 task:
-  task_id: boc_rate_cut_next_meeting
-  target_series_id: boc_rate_cut_event
+  task_id: boc_rate_direction_next_meeting
+  target_series_id: boc_rate_decision_direction
   horizons: [1]
   frequency: D
-  payload_type: binary
+  payload_type: categorical
+  categories:
+    - {label: cut, value: -1}
+    - {label: hold, value: 0}
+    - {label: hike, value: 1}
   description: >-
-    Will the Bank of Canada LOWER its target for the overnight rate at the
-    fixed announcement date occurring one day after the forecast origin?
-    Outcome is 1 if the target rate decreases at that announcement (any cut
-    size), 0 otherwise (hold or hike). Announcements are at 09:45 ET; the
+    At the Bank of Canada fixed announcement date occurring one day after the
+    forecast origin, will the Bank CUT, HOLD, or HIKE its target for the
+    overnight rate? Outcome is the direction of the target-rate change at
+    that announcement (any size). Announcements are at 09:45 ET; the
     forecast must be issued with information available the day before.
 
 start: "2025-01-01"

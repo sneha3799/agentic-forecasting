@@ -1,7 +1,9 @@
 """Data-service setup for the Bank of Canada rate-decision experiment.
 
-This use case predicts **P(rate cut at the next BoC fixed announcement
-date)** — a discrete event-prediction problem, not a time-series problem.
+This use case predicts Bank of Canada decisions at the next fixed announcement
+date — either the compact binary rate-cut event or the ordered 3-way decision
+direction. These are discrete event-prediction problems, not time-series
+problems.
 Three kinds of data come together here:
 
 1. **The daily target rate** (StatCan table 10-10-0139-01, "Target rate"):
@@ -9,11 +11,11 @@ Three kinds of data come together here:
 2. **The meeting calendar** (``meeting_schedule.yaml``): curated fixed
    announcement dates. Required because *hold* decisions — most meetings —
    leave no trace in any rate series.
-3. **The derived 0/1 event series** (``boc_rate_cut_event``): one row per
-   meeting, ``1.0`` if the target rate decreased at that meeting. This is the
-   target series of the binary :class:`ForecastingTask`; deriving it as a
-   first-class series means the standard resolution and Brier-scoring paths
-   in the evaluation harness apply unchanged.
+3. **Derived per-meeting decision series**: ``boc_rate_cut_event`` stores the
+   binary ``1.0`` cut event; ``boc_rate_decision_direction`` stores ``-1.0``
+   for cuts, ``0.0`` for holds, and ``1.0`` for hikes. Deriving these as
+   first-class series means the standard resolution and scoring paths in the
+   evaluation harness apply unchanged.
 
 Macro covariates (CPI, unemployment, bond yields) are registered for the
 conventional baseline and for prompt context. **Leakage warning:** monthly
@@ -25,6 +27,7 @@ release precision. The daily market series use ``release_lag_days=1``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 import yaml
@@ -32,6 +35,7 @@ from aieng.forecasting.data import DataService, SeriesMetadata
 from aieng.forecasting.data.adapters.base import BaseAdapter
 from aieng.forecasting.data.adapters.fred import FREDAdapter
 from aieng.forecasting.data.adapters.statcan import StatCanAdapter
+from aieng.forecasting.evaluation.task import TaskCategory
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +47,16 @@ TARGET_RATE_SERIES_ID = "boc_overnight_target_rate"
 
 RATE_CUT_EVENT_SERIES_ID = "boc_rate_cut_event"
 """Derived per-meeting 0/1 series: 1.0 if the target rate was cut at that meeting."""
+
+DIRECTION_SERIES_ID = "boc_rate_decision_direction"
+"""Derived per-meeting direction series: -1.0 cut, 0.0 hold, 1.0 hike."""
+
+DIRECTION_TASK_CATEGORIES: list[TaskCategory] = [
+    TaskCategory(label="cut", value=-1.0),
+    TaskCategory(label="hold", value=0.0),
+    TaskCategory(label="hike", value=1.0),
+]
+"""Ordered categories for the 3-way BoC decision-direction task."""
 
 BOND_YIELD_2YR_SERIES_ID = "boc_govt_bond_yield_2yr"
 """Daily Government of Canada 2-year benchmark bond yield (percent)."""
@@ -127,8 +141,8 @@ def load_unscheduled_announcements(path: Path | None = None) -> list[pd.Timestam
 # ---------------------------------------------------------------------------
 
 
-def derive_rate_cut_events(rate_df: pd.DataFrame, meeting_dates: list[pd.Timestamp]) -> pd.DataFrame:
-    """Derive the per-meeting 0/1 rate-cut event series from the daily target rate.
+def derive_rate_decision_directions(rate_df: pd.DataFrame, meeting_dates: list[pd.Timestamp]) -> pd.DataFrame:
+    """Derive the per-meeting -1/0/+1 decision-direction series from the daily target rate.
 
     For each meeting date ``d``, the outcome compares:
 
@@ -142,8 +156,8 @@ def derive_rate_cut_events(rate_df: pd.DataFrame, meeting_dates: list[pd.Timesta
     the next business day (so the announcement-day print still shows the old
     rate). Intermeeting emergency moves shift ``rate_before`` of the *next*
     meeting, which is exactly the right behaviour — the meeting outcome is
-    "did the Bank cut at this announcement", not "is the rate lower than at
-    the previous meeting".
+    "what did the Bank do at this announcement", not "is the rate different
+    than at the previous meeting".
 
     Meetings without observations on both sides (e.g. future scheduled dates)
     are skipped.
@@ -159,8 +173,8 @@ def derive_rate_cut_events(rate_df: pd.DataFrame, meeting_dates: list[pd.Timesta
     Returns
     -------
     pd.DataFrame
-        Canonical event series: ``timestamp`` (announcement date), ``value``
-        (1.0 = cut, 0.0 = hold or hike), ``released_at`` (announcement date —
+        Canonical direction series: ``timestamp`` (announcement date),
+        ``value`` (-1.0 = cut, 0.0 = hold, 1.0 = hike), ``released_at`` (announcement date —
         the outcome is public the moment it is announced).
     """
     timestamps = pd.to_datetime(rate_df["timestamp"]).reset_index(drop=True)
@@ -177,12 +191,42 @@ def derive_rate_cut_events(rate_df: pd.DataFrame, meeting_dates: list[pd.Timesta
         rows.append(
             {
                 "timestamp": meeting,
-                "value": 1.0 if rate_after < rate_before else 0.0,
+                "value": -1.0 if rate_after < rate_before else 1.0 if rate_after > rate_before else 0.0,
                 "released_at": meeting,
             }
         )
 
     return pd.DataFrame(rows, columns=["timestamp", "value", "released_at"])
+
+
+def derive_rate_cut_events(rate_df: pd.DataFrame, meeting_dates: list[pd.Timestamp]) -> pd.DataFrame:
+    """Derive the per-meeting 0/1 rate-cut event series from the daily target rate.
+
+    This binary wrapper uses the same before/after comparison as
+    :func:`derive_rate_decision_directions`, returning ``1.0`` exactly when
+    the meeting direction is a cut and ``0.0`` for holds or hikes. Meetings
+    without observations on both sides (e.g. future scheduled dates) are
+    skipped.
+
+    Parameters
+    ----------
+    rate_df : pd.DataFrame
+        Daily target-rate series in canonical format (``timestamp``,
+        ``value``, ``released_at``), sorted ascending.
+    meeting_dates : list[pd.Timestamp]
+        Fixed announcement dates to resolve.
+
+    Returns
+    -------
+    pd.DataFrame
+        Canonical event series: ``timestamp`` (announcement date), ``value``
+        (1.0 = cut, 0.0 = hold or hike), ``released_at`` (announcement date —
+        the outcome is public the moment it is announced).
+    """
+    directions = derive_rate_decision_directions(rate_df, meeting_dates)
+    events = directions.copy()
+    events["value"] = (events["value"] == -1.0).astype(float)
+    return events
 
 
 def validate_schedule_against_rate_series(
@@ -241,36 +285,48 @@ def validate_schedule_against_rate_series(
     return orphans
 
 
-class BoCRateCutEventAdapter(BaseAdapter):
-    """Adapter producing the per-meeting 0/1 rate-cut event series.
+class BoCDecisionEventAdapter(BaseAdapter):
+    """Adapter producing derived per-meeting BoC decision series.
 
     Joins the committed meeting calendar with the daily target-rate series at
-    fetch time, so the event series always reflects the freshest cached rate
-    data without a separate materialisation step.
+    fetch time, so derived event series always reflect the freshest cached
+    rate data without a separate materialisation step.
 
     Parameters
     ----------
     rate_adapter : BaseAdapter
         Adapter for the daily target-rate series (canonical format).
     meeting_dates : list[pd.Timestamp]
-        Fixed announcement dates to resolve into events.
+        Fixed announcement dates to resolve into outcomes.
+    kind : {"cut", "direction"}
+        Derived target to produce: binary cut event or 3-way direction.
     """
 
-    def __init__(self, rate_adapter: BaseAdapter, meeting_dates: list[pd.Timestamp]) -> None:
+    def __init__(
+        self,
+        rate_adapter: BaseAdapter,
+        meeting_dates: list[pd.Timestamp],
+        kind: Literal["cut", "direction"],
+    ) -> None:
         self._rate_adapter = rate_adapter
         self._meeting_dates = sorted(meeting_dates)
+        self._kind = kind
 
     def fetch(self) -> pd.DataFrame:
-        """Return the derived event series in canonical format.
+        """Return the derived decision series in canonical format.
 
         Returns
         -------
         pd.DataFrame
-            Columns ``timestamp``, ``value`` (0.0/1.0), ``released_at``; one
-            row per resolvable meeting, sorted ascending.
+            Columns ``timestamp``, ``value``, ``released_at``; one row per
+            resolvable meeting, sorted ascending.
         """
         rate_df = self._rate_adapter.fetch()
-        return derive_rate_cut_events(rate_df, self._meeting_dates)
+        if self._kind == "cut":
+            return derive_rate_cut_events(rate_df, self._meeting_dates)
+        if self._kind == "direction":
+            return derive_rate_decision_directions(rate_df, self._meeting_dates)
+        raise ValueError(f"Unsupported BoC decision event kind: {self._kind!r}.")
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +347,8 @@ def build_boc_service(
     - ``boc_overnight_target_rate`` — daily policy rate (StatCan 10-10-0139-01).
     - ``boc_rate_cut_event`` — derived 0/1 per-meeting event series (the
       binary task target).
+    - ``boc_rate_decision_direction`` — derived -1/0/+1 per-meeting direction
+      series (the ordered-categorical task target).
     - ``boc_govt_bond_yield_2yr`` — daily 2-year GoC benchmark yield, a
       market-implied gauge of near-term policy expectations.
     - ``cpi_all_items_canada`` — monthly headline CPI (the BoC targets 2%
@@ -344,7 +402,7 @@ def build_boc_service(
 
     svc.register(
         RATE_CUT_EVENT_SERIES_ID,
-        BoCRateCutEventAdapter(target_rate_adapter, meeting_dates),
+        BoCDecisionEventAdapter(target_rate_adapter, meeting_dates, kind="cut"),
         SeriesMetadata(
             series_id=RATE_CUT_EVENT_SERIES_ID,
             description=(
@@ -355,6 +413,22 @@ def build_boc_service(
             ),
             source=f"Derived (StatCan {RATES_TABLE_ID} + meeting_schedule.yaml)",
             units="0/1 event indicator",
+            frequency="irregular (8 fixed announcement dates per year)",
+        ),
+    )
+
+    svc.register(
+        DIRECTION_SERIES_ID,
+        BoCDecisionEventAdapter(target_rate_adapter, meeting_dates, kind="direction"),
+        SeriesMetadata(
+            series_id=DIRECTION_SERIES_ID,
+            description=(
+                "Per-meeting direction of the BoC target-rate decision: -1 cut, "
+                "0 hold, +1 hike. Derived from the daily target rate and the "
+                "committed meeting calendar."
+            ),
+            source=f"Derived (StatCan {RATES_TABLE_ID} + meeting_schedule.yaml)",
+            units="-1/0/+1 direction indicator",
             frequency="irregular (8 fixed announcement dates per year)",
         ),
     )
@@ -419,14 +493,17 @@ __all__ = [
     "CPI_TABLE_ID",
     "DEFAULT_FRED_CACHE_DIR",
     "DEFAULT_STATCAN_CACHE_DIR",
+    "DIRECTION_SERIES_ID",
+    "DIRECTION_TASK_CATEGORIES",
     "MEETING_SCHEDULE_PATH",
     "RATES_TABLE_ID",
     "RATE_CUT_EVENT_SERIES_ID",
     "TARGET_RATE_SERIES_ID",
     "UNEMPLOYMENT_FRED_ID",
     "UNEMPLOYMENT_SERIES_ID",
-    "BoCRateCutEventAdapter",
+    "BoCDecisionEventAdapter",
     "build_boc_service",
+    "derive_rate_decision_directions",
     "derive_rate_cut_events",
     "load_meeting_schedule",
     "load_unscheduled_announcements",

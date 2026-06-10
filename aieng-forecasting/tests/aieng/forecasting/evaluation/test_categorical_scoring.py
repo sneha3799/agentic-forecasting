@@ -246,7 +246,7 @@ class TestCategoricalBacktestDispatch:
     """Categorical tasks are scored with RPS; mismatches fail loudly."""
 
     def test_categorical_backtest_scores_with_rps(self) -> None:
-        """Backtest reports metric='rps' and scores fixed distributions by category order."""
+        """Backtest reports metric='rps' and scores fixed distributions in order."""
         svc = _build_category_service(values=[0.0] * 61 + [-1.0, 1.0])
         result = backtest(FixedCategoricalPredictor(), _make_categorical_spec(), svc)
         assert result.metric == "rps"
@@ -279,7 +279,7 @@ class TestCategoricalFrequencyPredictor:
         assert preds[0].metadata == {"n_observations": 4, "window": None}
 
     def test_trailing_window_frequencies(self) -> None:
-        """A trailing window restricts the empirical frequencies to recent observations."""
+        """A trailing window restricts frequencies to recent observations."""
         svc = _build_category_service(values=[-1.0] * 10 + [0.0, 1.0, 1.0])
         ctx = svc.context(as_of=datetime(2025, 1, 1))
         preds = CategoricalFrequencyPredictor(window=3).predict(_make_categorical_task(), ctx)

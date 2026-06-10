@@ -1,9 +1,14 @@
-"""Logistic-regression conventional baseline for BoC rate-cut prediction.
+"""Logistic-regression conventional baseline for BoC rate-decision prediction.
 
-This is the best-suited classical method for a binary event with a handful of
-slow-moving macro drivers: logistic regression produces calibrated
-probabilities natively, is robust with ~100 training examples and heavy class
-imbalance, and its coefficients are directly interpretable in a notebook.
+This baseline supports both BoC task framings:
+
+- binary ``P(rate cut)`` forecasts; and
+- ordered 3-way cut/hold/hike direction forecasts.
+
+Logistic regression is a good compact classical method for these discrete
+events with a handful of slow-moving macro drivers: it produces probabilities
+natively, is robust with ~100 training examples and heavy class imbalance, and
+its binary coefficients are directly interpretable in a notebook.
 
 Features (all computed leak-safely as of the forecast origin):
 
@@ -34,18 +39,20 @@ macro series), because the monthly adapters carry only approximate
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 from aieng.forecasting.data.context import ForecastContext
-from aieng.forecasting.evaluation.prediction import BinaryForecast, Prediction
+from aieng.forecasting.evaluation.prediction import BinaryForecast, CategoricalForecast, Prediction
 from aieng.forecasting.evaluation.predictor import Predictor
-from aieng.forecasting.evaluation.task import ForecastingTask
+from aieng.forecasting.evaluation.task import ForecastingTask, TaskCategory
 
 from ..data import (
     BOND_YIELD_2YR_SERIES_ID,
     CPI_SERIES_ID,
+    DIRECTION_TASK_CATEGORIES,
     TARGET_RATE_SERIES_ID,
     UNEMPLOYMENT_SERIES_ID,
 )
@@ -135,6 +142,9 @@ def build_feature_row(
 class BoCLogisticPredictor(Predictor):
     """Fit-at-origin logistic regression on leak-safe macro features.
 
+    Binary tasks emit :class:`BinaryForecast`; categorical cut/hold/hike tasks
+    emit :class:`CategoricalForecast` in the task-declared category order.
+
     Parameters
     ----------
     regularization_c : float
@@ -158,40 +168,32 @@ class BoCLogisticPredictor(Predictor):
         return "boc_logistic_macro"
 
     def predict(self, task: ForecastingTask, context: ForecastContext) -> list[Prediction]:
-        """Fit on past meetings visible at the origin and emit one probability.
+        """Fit on past meetings visible at the origin and emit one forecast.
 
         Raises
         ------
         ValueError
-            If the task is not binary or requests more than one horizon.
+            If the task payload is unsupported or requests more than one horizon.
         """
-        if task.payload_type != "binary":
-            raise ValueError(f"{type(self).__name__} requires a binary task; got payload_type='{task.payload_type}'.")
         if len(task.horizons) != 1:
             raise ValueError(f"{type(self).__name__} supports exactly one horizon; got {task.horizons}.")
 
         as_of = pd.Timestamp(context.as_of)
-        event_df = context.get_series(task.target_series_id)
+        target_df = context.get_series(task.target_series_id)
         rate_df = context.get_series(TARGET_RATE_SERIES_ID)
         yield_df = context.get_series(BOND_YIELD_2YR_SERIES_ID)
         cpi_df = context.get_series(CPI_SERIES_ID)
         unemployment_df = context.get_series(UNEMPLOYMENT_SERIES_ID)
 
-        # Training set: every resolved past meeting, with features rebuilt as
-        # of that meeting's own origin (announcement - 1 day).
-        feature_rows: list[list[float]] = []
-        outcomes: list[float] = []
-        for meeting, outcome in zip(event_df["timestamp"], event_df["value"]):
-            past_origin = pd.Timestamp(meeting) - pd.Timedelta(days=1)
-            features = build_feature_row(past_origin, rate_df, yield_df, cpi_df, unemployment_df)
-            if features is None:
-                continue
-            feature_rows.append([features[name] for name in FEATURE_NAMES])
-            outcomes.append(float(outcome))
-
+        feature_rows, outcomes = self._build_training_data(target_df, rate_df, yield_df, cpi_df, unemployment_df)
         current_features = build_feature_row(as_of, rate_df, yield_df, cpi_df, unemployment_df)
 
-        probability, model_info = self._fit_and_predict(feature_rows, outcomes, current_features)
+        if task.payload_type == "binary":
+            payload, model_info = self._predict_binary(feature_rows, outcomes, current_features)
+        elif task.payload_type == "categorical":
+            payload, model_info = self._predict_categorical(task, feature_rows, outcomes, current_features)
+        else:
+            raise ValueError(f"{type(self).__name__} does not support payload_type='{task.payload_type}'.")
 
         offset = pd.tseries.frequencies.to_offset(task.frequency)
         forecast_date = (as_of + offset * task.horizons[0]).to_pydatetime()
@@ -202,18 +204,40 @@ class BoCLogisticPredictor(Predictor):
                 issued_at=datetime.now(tz=timezone.utc).replace(tzinfo=None),
                 as_of=context.as_of,
                 forecast_date=forecast_date,
-                payload=BinaryForecast(probability=probability),
+                payload=payload,
                 metadata={"n_train": len(outcomes), **model_info},
             )
         ]
 
-    def _fit_and_predict(
+    def _build_training_data(
+        self,
+        target_df: pd.DataFrame,
+        rate_df: pd.DataFrame,
+        yield_df: pd.DataFrame,
+        cpi_df: pd.DataFrame,
+        unemployment_df: pd.DataFrame,
+    ) -> tuple[list[list[float]], list[float]]:
+        """Build leak-safe training examples from resolved past meetings."""
+        # Training set: every resolved past meeting, with features rebuilt as
+        # of that meeting's own origin (announcement - 1 day).
+        feature_rows: list[list[float]] = []
+        outcomes: list[float] = []
+        for meeting, outcome in zip(target_df["timestamp"], target_df["value"]):
+            past_origin = pd.Timestamp(meeting) - pd.Timedelta(days=1)
+            features = build_feature_row(past_origin, rate_df, yield_df, cpi_df, unemployment_df)
+            if features is None:
+                continue
+            feature_rows.append([features[name] for name in FEATURE_NAMES])
+            outcomes.append(float(outcome))
+        return feature_rows, outcomes
+
+    def _predict_binary(
         self,
         feature_rows: list[list[float]],
         outcomes: list[float],
         current_features: dict[str, float] | None,
-    ) -> tuple[float, dict[str, object]]:
-        """Fit the model and return ``(probability, metadata)``.
+    ) -> tuple[BinaryForecast, dict[str, object]]:
+        """Fit the binary model and return ``(payload, metadata)``.
 
         Falls back to the training base rate when the design matrix is too
         small, degenerate (single class), or current features are missing.
@@ -224,7 +248,7 @@ class BoCLogisticPredictor(Predictor):
             current_features is None or len(outcomes) < self._min_train or len(set(outcomes)) < 2  # noqa: PLR2004
         )
         if degenerate:
-            return base_rate, {"model": "base_rate_fallback"}
+            return BinaryForecast(probability=base_rate), {"model": "base_rate_fallback"}
 
         from sklearn.linear_model import LogisticRegression  # noqa: PLC0415
         from sklearn.pipeline import make_pipeline  # noqa: PLC0415
@@ -237,11 +261,67 @@ class BoCLogisticPredictor(Predictor):
         probability = float(model.predict_proba(x_now)[0, 1])
 
         coefs = model.named_steps["logisticregression"].coef_[0]
-        return probability, {
+        return BinaryForecast(probability=probability), {
             "model": "logistic_regression",
             "features": dict(zip(FEATURE_NAMES, (float(f) for f in x_now[0]))),
             "coefficients": dict(zip(FEATURE_NAMES, (float(c) for c in coefs))),
         }
+
+    def _predict_categorical(
+        self,
+        task: ForecastingTask,
+        feature_rows: list[list[float]],
+        outcomes: list[float],
+        current_features: dict[str, float] | None,
+    ) -> tuple[CategoricalForecast, dict[str, object]]:
+        """Fit the multinomial model and return ``(payload, metadata)``."""
+        categories = task.categories if task.categories is not None else DIRECTION_TASK_CATEGORIES
+        degenerate = (
+            current_features is None or len(outcomes) < self._min_train or len(set(outcomes)) < 2  # noqa: PLR2004
+        )
+        if degenerate:
+            return CategoricalForecast(probabilities=self._class_frequency_probabilities(outcomes, categories)), {
+                "model": "class_frequency_fallback"
+            }
+
+        from sklearn.linear_model import LogisticRegression  # noqa: PLC0415
+        from sklearn.pipeline import make_pipeline  # noqa: PLC0415
+        from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
+
+        model = make_pipeline(StandardScaler(), LogisticRegression(C=self._c, max_iter=1000))
+        model.fit(np.asarray(feature_rows), np.asarray(outcomes))
+
+        x_now = np.asarray([[current_features[name] for name in FEATURE_NAMES]])
+        row = model.predict_proba(x_now)[0]
+        probabilities = {category.label: 0.0 for category in categories}
+        for class_value, probability in zip(model.classes_, row):
+            category = self._category_for_value(float(class_value), categories)
+            probabilities[category.label] = float(probability)
+
+        return CategoricalForecast(probabilities=probabilities), {
+            "model": "multinomial_logistic_regression",
+            "features": dict(zip(FEATURE_NAMES, (float(f) for f in x_now[0]))),
+        }
+
+    def _class_frequency_probabilities(self, outcomes: list[float], categories: list[TaskCategory]) -> dict[str, float]:
+        """Return empirical category frequencies over visible outcomes."""
+        if not outcomes:
+            probability = 1.0 / len(categories)
+            return {category.label: probability for category in categories}
+
+        counts = {category.label: 0 for category in categories}
+        for outcome in outcomes:
+            category = self._category_for_value(outcome, categories)
+            counts[category.label] += 1
+        n = len(outcomes)
+        return {category.label: counts[category.label] / n for category in categories}
+
+    def _category_for_value(self, value: float, categories: list[TaskCategory]) -> TaskCategory:
+        """Find the task category matching an observed class value."""
+        for category in categories:
+            if math.isclose(value, category.value):
+                return category
+        raise ValueError(f"Observed class value {value} is not declared in task.categories.")
 
 
 __all__ = ["FEATURE_NAMES", "BoCLogisticPredictor", "build_feature_row"]
