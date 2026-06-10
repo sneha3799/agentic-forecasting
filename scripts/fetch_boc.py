@@ -112,10 +112,7 @@ def main() -> None:
         f"({rate_df['timestamp'].min().date()} to {rate_df['timestamp'].max().date()})"
     )
     n_cuts = int(event_df["value"].sum())
-    print(
-        f"Rate-cut events: {len(event_df)} resolved meetings, {n_cuts} cuts "
-        f"(base rate {n_cuts / len(event_df):.1%})"
-    )
+    print(f"Rate-cut events: {len(event_df)} resolved meetings, {n_cuts} cuts (base rate {n_cuts / len(event_df):.1%})")
 
     print()
     summary = svc.summary()

@@ -16,8 +16,9 @@ Usage::
     from aieng.forecasting.methods import HistoricalFrequencyPredictor
     from aieng.forecasting.evaluation import backtest, BacktestSpec
 
-    result = backtest(predictor=HistoricalFrequencyPredictor(), spec=spec, data_service=svc)
-    print(f"Base-rate mean Brier: {result.mean_score:.4f}")  # your model must beat this
+    predictor = HistoricalFrequencyPredictor()
+    result = backtest(predictor=predictor, spec=spec, data_service=svc)
+    print(f"Base-rate mean Brier: {result.mean_score:.4f}")  # must be beaten
 """
 
 from __future__ import annotations
@@ -82,9 +83,7 @@ class HistoricalFrequencyPredictor(Predictor):
         values = series_df["value"].astype(float)
         if not values.isin([0.0, 1.0]).all():
             bad = sorted(set(values[~values.isin([0.0, 1.0])]))
-            raise ValueError(
-                f"Target series '{task.target_series_id}' must be a 0/1 event series; found values {bad}."
-            )
+            raise ValueError(f"Target series '{task.target_series_id}' must be a 0/1 event series; found values {bad}.")
 
         if self._window is not None:
             values = values.tail(self._window)

@@ -163,7 +163,7 @@ class TestBrierDispatch:
         result = backtest(ConstantProbabilityPredictor(0.25), _make_binary_spec(), svc)
         assert result.metric == "brier"
         # Every score is either 0.25^2 (no event) or 0.75^2 (event).
-        assert set(round(s, 6) for s in result.scores) <= {round(0.25**2, 6), round(0.75**2, 6)}
+        assert {round(s, 6) for s in result.scores} <= {round(0.25**2, 6), round(0.75**2, 6)}
         assert result.mean_score == pytest.approx(sum(result.scores) / len(result.scores))
 
     def test_continuous_payload_on_binary_task_raises(self) -> None:
