@@ -1,0 +1,58 @@
+# BoC Rate Cut Eval Spec — 2025-2026 protected window
+#
+# Held-out, budget-controlled evaluation over the 12 BoC fixed announcement
+# dates from January 2025 through June 2026. All 12 are resolved as of
+# June 2026 (the June 10 announcement resolves the final origin).
+#
+# This window contains the tail of the 2024-25 easing cycle (cuts in Jan,
+# Mar, Sep, Oct 2025) followed by an extended hold at 2.25% — a calibration
+# test under regime change, not just event detection.
+#
+# Use this spec sparingly. max_runs: 5 limits how many times a participant
+# may run evaluate() against it, reducing the risk of inadvertently
+# over-fitting to the held-out window.
+#
+# Origins are explicit (announcement_date - 1 day) because BoC meetings are
+# an irregular calendar; derived from ../meeting_schedule.yaml.
+
+spec_id: boc_rate_cut_eval_2025_2026
+
+description: >-
+  Protected eval across the 12 BoC fixed announcement dates from January
+  2025 through June 2026. At each origin (announcement date minus one day)
+  predictors emit P(rate cut at tomorrow's announcement), scored with the
+  Brier score. Budget-limited to 5 runs per participant tracker.
+
+task:
+  task_id: boc_rate_cut_next_meeting
+  target_series_id: boc_rate_cut_event
+  horizons: [1]
+  frequency: D
+  payload_type: binary
+  description: >-
+    Will the Bank of Canada LOWER its target for the overnight rate at the
+    fixed announcement date occurring one day after the forecast origin?
+    Outcome is 1 if the target rate decreases at that announcement (any cut
+    size), 0 otherwise (hold or hike). Announcements are at 09:45 ET; the
+    forecast must be issued with information available the day before.
+
+start: "2025-01-01"
+end: "2026-06-30"
+stride: 1
+warmup: 8
+max_runs: 5
+
+# One origin per meeting: announcement_date - 1 day.
+origin_dates:
+  - "2025-01-28"  # meeting 2025-01-29 (cut)
+  - "2025-03-11"  # meeting 2025-03-12 (cut)
+  - "2025-04-15"  # meeting 2025-04-16
+  - "2025-06-03"  # meeting 2025-06-04
+  - "2025-07-29"  # meeting 2025-07-30
+  - "2025-09-16"  # meeting 2025-09-17 (cut)
+  - "2025-10-28"  # meeting 2025-10-29 (cut)
+  - "2025-12-09"  # meeting 2025-12-10
+  - "2026-01-27"  # meeting 2026-01-28
+  - "2026-03-17"  # meeting 2026-03-18
+  - "2026-04-28"  # meeting 2026-04-29
+  - "2026-06-09"  # meeting 2026-06-10
