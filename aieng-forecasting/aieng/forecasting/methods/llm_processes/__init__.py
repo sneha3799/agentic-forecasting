@@ -11,6 +11,9 @@ strategy:
 - :class:`BinaryProbabilityLLMPredictor` — direct elicitation of one
   calibrated probability for binary-event tasks
   (``ForecastingTask.payload_type == "binary"``), scored with Brier.
+- :class:`CategoricalProbabilityLLMPredictor` — direct elicitation of a
+  calibrated distribution over the task-declared ordered categories
+  (``ForecastingTask.payload_type == "categorical"``), scored with RPS.
 - ``point_intervals`` — design placeholder for a token-efficient point-plus-
   interval contract. It may become a configurable sparse quantile grid rather
   than a separate predictor.
@@ -45,6 +48,10 @@ from aieng.forecasting.methods.llm_processes.binary_probability import (
     BinaryProbabilityLLMPredictor,
     BinaryProbabilityLLMPredictorConfig,
 )
+from aieng.forecasting.methods.llm_processes.categorical_probability import (
+    CategoricalProbabilityLLMPredictor,
+    CategoricalProbabilityLLMPredictorConfig,
+)
 from aieng.forecasting.methods.llm_processes.quantile_grid import (
     QuantileGridLLMPredictor,
     QuantileGridLLMPredictorConfig,
@@ -58,6 +65,8 @@ from aieng.forecasting.methods.llm_processes.sampled_trajectory import (
 __all__ = [
     "BinaryProbabilityLLMPredictor",
     "BinaryProbabilityLLMPredictorConfig",
+    "CategoricalProbabilityLLMPredictor",
+    "CategoricalProbabilityLLMPredictorConfig",
     "SampledTrajectoryLLMPredictor",
     "SampledTrajectoryLLMPredictorConfig",
     "QuantileGridLLMPredictor",

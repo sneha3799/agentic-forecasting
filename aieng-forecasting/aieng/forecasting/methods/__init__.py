@@ -48,6 +48,8 @@ from .baselines import CategoricalFrequencyPredictor, HistoricalFrequencyPredict
 from .llm_processes import (
     BinaryProbabilityLLMPredictor,
     BinaryProbabilityLLMPredictorConfig,
+    CategoricalProbabilityLLMPredictor,
+    CategoricalProbabilityLLMPredictorConfig,
     QuantileGridLLMPredictor,
     QuantileGridLLMPredictorConfig,
     SampledTrajectoryLLMPredictor,
@@ -64,6 +66,8 @@ __all__ = [
     "BinaryProbabilityLLMPredictor",
     "BinaryProbabilityLLMPredictorConfig",
     "CategoricalFrequencyPredictor",
+    "CategoricalProbabilityLLMPredictor",
+    "CategoricalProbabilityLLMPredictorConfig",
     "DartsAutoARIMAPredictor",
     "DartsLightGBMPredictor",
     "DartsLinearRegressionPredictor",
