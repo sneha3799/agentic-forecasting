@@ -219,7 +219,7 @@ class ContinuousAgentForecastOutput(AgentForecastOutput):
         horizons to match ``task.horizons`` exactly.
     rationale : str
         Optional overall explanation propagated to
-        ``Prediction.metadata["agent_rationale"]`` when non-empty.
+        ``Prediction.metadata["rationale"]`` when non-empty.
 
     Examples
     --------
@@ -340,7 +340,7 @@ class ContinuousAgentForecastOutput(AgentForecastOutput):
         offset = pd.tseries.frequencies.to_offset(task.frequency)
         base_metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
         if self.rationale.strip():
-            base_metadata["agent_rationale"] = self.rationale
+            base_metadata["rationale"] = self.rationale
 
         predictions: list[Prediction] = []
         for horizon in task.horizons:
@@ -431,7 +431,7 @@ class DiscreteAgentForecastOutput(AgentForecastOutput):
         offset = pd.tseries.frequencies.to_offset(task.frequency)
         prediction_metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
         if self.reasoning.strip():
-            prediction_metadata["agent_rationale"] = self.reasoning
+            prediction_metadata["rationale"] = self.reasoning
         if self.direction_bias.strip():
             prediction_metadata["direction_bias"] = self.direction_bias
         if self.key_signals:
@@ -607,7 +607,7 @@ class CategoricalAgentForecastOutput(AgentForecastOutput):
         offset = pd.tseries.frequencies.to_offset(task.frequency)
         prediction_metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
         if self.reasoning.strip():
-            prediction_metadata["agent_rationale"] = self.reasoning
+            prediction_metadata["rationale"] = self.reasoning
         if self.key_signals:
             prediction_metadata["key_signals"] = list(self.key_signals)
         if self.confidence.strip():

@@ -12,6 +12,8 @@ return DataFrames. They never fetch data or mutate global state.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 import numpy as np
 import pandas as pd
 from aieng.forecasting.evaluation.backtest import BacktestResult
@@ -309,8 +311,154 @@ def rationales_table(result: BacktestResult | EvalResult) -> pd.DataFrame:
     return pd.DataFrame(base_rows)
 
 
+@dataclass(frozen=True)
+class PanelRow:
+    """One method's prediction for a single meeting, for the decision panel.
+
+    Attributes
+    ----------
+    predictor_id : str
+        Identifier of the predictor that produced this row.
+    probabilities : dict[str, float]
+        Predicted probability per category label, in task-category order.
+    score : float
+        The meeting's score for this predictor (RPS for the 3-way task).
+    rationale : str
+        Stated reasoning, if the method recorded one (agents and LLMPs do via
+        ``Prediction.metadata["rationale"]``); empty string otherwise.
+    key_signals : list[str]
+        Supporting signals, if recorded (agents only today); empty otherwise.
+    """
+
+    predictor_id: str
+    probabilities: dict[str, float]
+    score: float
+    rationale: str = ""
+    key_signals: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DecisionPanel:
+    """Everything needed to render one meeting's decision panel across methods.
+
+    Attributes
+    ----------
+    meeting_date : pd.Timestamp
+        The announcement date being predicted.
+    origin : pd.Timestamp
+        Forecast origin (``as_of``) the predictions were issued from.
+    categories : list[str]
+        Ordered category labels (e.g. ``["cut", "hold", "hike"]``).
+    outcome_label : str or None
+        Realised decision at ``meeting_date``, or ``None`` if unresolved.
+    prior_outcome_label : str or None
+        The most recent resolved decision strictly before ``meeting_date``,
+        for context; ``None`` if none is available.
+    rows : list[PanelRow]
+        One row per predictor, in the order the results were supplied.
+    """
+
+    meeting_date: pd.Timestamp
+    origin: pd.Timestamp
+    categories: list[str]
+    outcome_label: str | None
+    prior_outcome_label: str | None
+    rows: list[PanelRow]
+
+
+def decision_panel_data(
+    results: dict[str, BacktestResult | EvalResult],
+    event_df: pd.DataFrame,
+    *,
+    meeting_date: str | pd.Timestamp | None = None,
+) -> DecisionPanel:
+    """Assemble one meeting's cross-method prediction panel.
+
+    Gathers, for a single announcement date, each categorical method's
+    predicted distribution, its score, and any stated ``rationale`` /
+    ``key_signals`` (read from ``Prediction.metadata`` exactly as
+    :func:`rationales_table` does), plus the realised outcome and the prior
+    decision for context.
+
+    Parameters
+    ----------
+    results : dict[str, BacktestResult | EvalResult]
+        Mapping ``predictor_id -> result``. Only categorical results
+        contribute; binary-only inputs raise ``ValueError``.
+    event_df : pd.DataFrame
+        Observed direction series (``timestamp`` / ``value``), used for the
+        realised and prior outcomes (values mapped to labels via the task's
+        declared categories).
+    meeting_date : str | pd.Timestamp | None
+        Which announcement to assemble. ``None`` (default) selects the most
+        recent meeting present across the categorical results.
+
+    Returns
+    -------
+    DecisionPanel
+    """
+    categorical = [(pid, r) for pid, r in results.items() if _task_from_result(r).payload_type == "categorical"]
+    if not categorical:
+        raise ValueError("decision_panel_data requires at least one categorical result.")
+
+    task = _task_from_result(categorical[0][1])
+    categories = [category.label for category in task.categories or []]
+    value_to_label = {category.value: category.label for category in task.categories or []}
+    outcome_by_date = {
+        pd.Timestamp(ts).normalize(): float(v) for ts, v in zip(event_df["timestamp"], event_df["value"], strict=True)
+    }
+
+    all_dates = sorted(
+        {pd.Timestamp(pred.forecast_date).normalize() for _, result in categorical for pred in result.predictions}
+    )
+    if not all_dates:
+        raise ValueError("No categorical predictions found in results.")
+    target = all_dates[-1] if meeting_date is None else pd.Timestamp(meeting_date).normalize()
+
+    rows: list[PanelRow] = []
+    origin: pd.Timestamp | None = None
+    for predictor_id, result in categorical:
+        for pred, score in zip(result.predictions, result.scores, strict=True):
+            if pd.Timestamp(pred.forecast_date).normalize() != target:
+                continue
+            if not isinstance(pred.payload, CategoricalForecast):
+                continue
+            metadata = pred.metadata or {}
+            rationale = str(metadata.get("rationale", "") or "").strip()
+            key_signals = list(metadata.get("key_signals", []) or [])
+            rows.append(
+                PanelRow(
+                    predictor_id=predictor_id,
+                    probabilities={label: float(pred.payload.probabilities[label]) for label in categories},
+                    score=float(score),
+                    rationale=rationale,
+                    key_signals=key_signals,
+                )
+            )
+            origin = pd.Timestamp(pred.as_of)
+            break
+
+    outcome_value = outcome_by_date.get(target)
+    outcome_label = value_to_label.get(outcome_value) if outcome_value is not None else None
+
+    prior_dates = sorted(d for d in outcome_by_date if d < target)
+    prior_outcome_label = value_to_label.get(outcome_by_date[prior_dates[-1]]) if prior_dates else None
+
+    return DecisionPanel(
+        meeting_date=target,
+        origin=origin if origin is not None else target,
+        categories=categories,
+        outcome_label=outcome_label,
+        prior_outcome_label=prior_outcome_label,
+        rows=rows,
+    )
+
+
 __all__ = [
+    "DecisionPanel",
+    "PanelRow",
     "calibration_table",
+    "decision_panel_data",
     "one_vs_rest_frame",
     "predictions_to_frame",
     "rationales_table",

@@ -55,6 +55,7 @@ from aieng.forecasting.methods.agentic.agent_factory import (
     AgentConfig,
     ContextRetrievalConfig,
 )
+from aieng.forecasting.models import LITE_MODEL
 from boc_rate_decisions.data import (
     BOND_YIELD_2YR_SERIES_ID,
     CPI_SERIES_ID,
@@ -268,7 +269,7 @@ class BoCDecisionPromptBuilder(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def build_boc_basic_config(model: str = "gemini-3-flash-preview") -> AgentConfig:
+def build_boc_basic_config(model: str = LITE_MODEL) -> AgentConfig:
     """Build the quantitative-only BoC analyst config (no tools).
 
     The agent reasons purely from the rate path, outcome history, and macro
@@ -293,8 +294,8 @@ def build_boc_basic_config(model: str = "gemini-3-flash-preview") -> AgentConfig
 
 
 def build_boc_news_config(
-    model: str = "gemini-3-flash-preview",
-    search_model: str = "gemini-3-flash-preview",
+    model: str = LITE_MODEL,
+    search_model: str = LITE_MODEL,
 ) -> AgentConfig:
     """Build the news-grounded BoC analyst config (bounded Google Search).
 
@@ -310,8 +311,9 @@ def build_boc_news_config(
         Model for the top-level analyst agent.
     search_model : str
         Model for the context-retrieval (web-search) sub-tool. Defaults to
-        ``gemini-3-flash-preview`` independently of ``model`` so that Gemini
-        handles Google Search even when the analyst uses a different provider.
+        the lite model (``gemini-3.1-flash-lite-preview``) independently of ``model`` so
+        that Gemini handles Google Search even when the analyst uses a
+        different provider.
 
     Returns
     -------

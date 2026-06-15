@@ -21,11 +21,12 @@ from aieng.forecasting.methods.llm_processes import (
     CategoricalProbabilityLLMPredictor,
     CategoricalProbabilityLLMPredictorConfig,
 )
+from aieng.forecasting.models import LITE_MODEL
 
 
 _ReasoningEffort = Literal["disable", "low", "medium", "high"]
 
-_DEFAULT_MODEL = "gemini-3-flash-preview"
+_DEFAULT_MODEL = LITE_MODEL
 _DEFAULT_REASONING_EFFORT: _ReasoningEffort | None = "low"
 _RECIPE_FAMILY = "boc_direction_v1"
 
@@ -66,7 +67,7 @@ def build_llmp_direction(
     Parameters
     ----------
     model : str
-        Model identifier. Defaults to ``gemini-3-flash-preview``.
+        Model identifier. Defaults to the lite model (``gemini-3.1-flash-lite-preview``).
     reasoning_effort : str or None
         Reasoning budget. ``"low"`` by default: some deliberation helps event
         reasoning, while heavy chain-of-thought is a documented source of

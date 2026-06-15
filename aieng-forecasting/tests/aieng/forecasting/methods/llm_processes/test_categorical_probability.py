@@ -5,6 +5,7 @@ import pytest
 from aieng.forecasting.evaluation.task import TaskCategory
 from aieng.forecasting.methods.llm_processes.categorical_probability import (
     _align_and_normalize,
+    _build_categorical_distribution_schema,
     _CategoricalDistribution,
     _CategoryProbability,
     serialize_categorical_history,
@@ -23,6 +24,26 @@ def _distribution(probs: dict[str, float]) -> _CategoricalDistribution:
     return _CategoricalDistribution(
         probabilities=[_CategoryProbability(label=label, probability=p) for label, p in probs.items()]
     )
+
+
+class TestDistributionParsing:
+    """Tolerant parsing of the elicited distribution shape."""
+
+    def test_list_of_rows_parses(self) -> None:
+        """The canonical {label, probability} array form parses unchanged."""
+        parsed = _CategoricalDistribution.model_validate(
+            {"probabilities": [{"label": "cut", "probability": 0.25}, {"label": "hold", "probability": 0.75}]}
+        )
+        assert {row.label: row.probability for row in parsed.probabilities} == {"cut": 0.25, "hold": 0.75}
+
+    def test_label_to_probability_mapping_is_coerced(self) -> None:
+        """A {label: probability} object is coerced into the list-of-rows form."""
+        parsed = _CategoricalDistribution.model_validate({"probabilities": {"cut": 0.25, "hold": 0.7, "hike": 0.05}})
+        assert {row.label: row.probability for row in parsed.probabilities} == {
+            "cut": 0.25,
+            "hold": 0.7,
+            "hike": 0.05,
+        }
 
 
 class TestAlignAndNormalize:
@@ -54,6 +75,40 @@ class TestAlignAndNormalize:
         """Response labels must exactly match the task label set."""
         with pytest.raises(RuntimeError, match="Missing: \\['hike'\\]; extra: \\['raise'\\]"):
             _align_and_normalize(_distribution({"cut": 0.5, "hold": 0.3, "raise": 0.2}), _categories())
+
+
+class TestReasoningElicitation:
+    """The optional free-text reasoning field is wired into schema and parsing."""
+
+    def test_schema_includes_reasoning_when_enabled(self) -> None:
+        """With elicitation on, 'reasoning' is a required string field."""
+        schema = _build_categorical_distribution_schema(elicit_reasoning=True)
+        assert "reasoning" in schema["properties"]
+        assert schema["properties"]["reasoning"] == {"type": "string"}
+        assert "reasoning" in schema["required"]
+        # Distribution still comes first so the model commits before justifying.
+        assert list(schema["properties"]) == ["probabilities", "reasoning"]
+
+    def test_schema_omits_reasoning_when_disabled(self) -> None:
+        """With elicitation off, the schema is the bare distribution contract."""
+        schema = _build_categorical_distribution_schema(elicit_reasoning=False)
+        assert "reasoning" not in schema["properties"]
+        assert schema["required"] == ["probabilities"]
+
+    def test_reasoning_defaults_empty_when_absent(self) -> None:
+        """Parsing a response with no reasoning field leaves it blank, not an error."""
+        parsed = _distribution({"cut": 0.6, "hold": 0.3, "hike": 0.1})
+        assert parsed.reasoning == ""
+
+    def test_reasoning_is_parsed_when_present(self) -> None:
+        """A reasoning string round-trips through the internal schema."""
+        parsed = _CategoricalDistribution.model_validate(
+            {
+                "probabilities": [{"label": "cut", "probability": 1.0}],
+                "reasoning": "easing cycle underway",
+            }
+        )
+        assert parsed.reasoning == "easing cycle underway"
 
 
 class TestSerializeCategoricalHistory:

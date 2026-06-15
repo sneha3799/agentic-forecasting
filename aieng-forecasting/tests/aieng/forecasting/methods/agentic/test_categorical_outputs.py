@@ -47,7 +47,7 @@ def test_categorical_output_to_predictions() -> None:
     # Probabilities are re-keyed in task category order regardless of agent row order.
     assert list(preds[0].payload.probabilities) == ["cut", "hold", "hike"]
     assert preds[0].payload.probabilities == pytest.approx({"cut": 0.6, "hold": 0.3, "hike": 0.1})
-    assert preds[0].metadata["agent_rationale"] == "easing cycle underway"
+    assert preds[0].metadata["rationale"] == "easing cycle underway"
     assert "probability_sum_raw" not in preds[0].metadata
 
 

@@ -37,6 +37,10 @@ Search the repo for `README.md` files (excluding `.venv/`) to find all current R
 
 Historical data is stored in `data/` at the repo root (gitignored). Before running notebooks or scripts that depend on live data, populate the cache by running the relevant script in `scripts/` (e.g. `uv run python scripts/fetch_cpi.py`). Never commit data files.
 
+### Model selection
+
+The project standardizes on **two** Vector-proxy models so examples stay consistent for participants: `gemini-3.1-flash-lite-preview` (the **lite / default** model) and `gemini-3.5-flash` (the **advanced** model, used for the adaptive-agent path and curriculum runs). Both are defined once in `aieng.forecasting.models` as `LITE_MODEL` / `ADVANCED_MODEL` (`DEFAULT_MODEL = LITE_MODEL`). Reference these constants in code rather than hardcoding model strings; notebooks pick one of the two literals with the other shown as a commented alternative. See `planning-docs/vector-llm-proxy.md` for the full convention.
+
 ### Code quality (not on commit)
 
 Git commits **do not** run automated hooks locally. Run **`make lint`** (ruff format + ruff check + mypy on `aieng`) before pushing — a passing `make lint` means CI will be happy with the code. To fully mirror CI (yaml checks, uv-lock, etc.) run **`uv run pre-commit run --all-files`**. CI on `main` runs the same `pre-commit` config.

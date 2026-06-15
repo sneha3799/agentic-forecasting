@@ -33,13 +33,14 @@ from aieng.forecasting.methods.llm_processes._client import (
     make_json_schema_response_format,
     run_async,
     sample_n_async,
+    set_current_trace_name,
 )
 from aieng.forecasting.methods.llm_processes.base import (
     LLMPredictor,
     LLMPredictorConfig,
     get_history_and_meta,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 if TYPE_CHECKING:
@@ -72,6 +73,16 @@ class CategoricalProbabilityLLMPredictorConfig(LLMPredictorConfig):
         default=None,
         description="Optional replacement for the metadata-derived series description block.",
     )
+    elicit_reasoning: bool = Field(
+        default=True,
+        description=(
+            "When True, ask the model for a short free-text 'reasoning' field alongside the "
+            "distribution, captured into Prediction.metadata['rationale'] for inspection and "
+            "downstream reasoning evaluation. The field is requested *after* the probabilities so "
+            "the model commits to the distribution first, keeping the answer-first ordering that "
+            "protects calibration. Set False to restore the bare distribution-only elicitation."
+        ),
+    )
     system_prompt_override: str | None = Field(
         default=None,
         description="Full replacement for the built-in categorical-probability system prompt.",
@@ -94,14 +105,40 @@ class _CategoryProbability(BaseModel):
 
 
 class _CategoricalDistribution(BaseModel):
-    """Internal Pydantic schema for one directly elicited distribution."""
+    """Internal Pydantic schema for one directly elicited distribution.
+
+    ``reasoning`` is optional so parsing succeeds whether or not the field was
+    requested (controlled by ``elicit_reasoning`` on the config).
+    """
 
     probabilities: list[_CategoryProbability]
+    reasoning: str = Field(default="")
+
+    @field_validator("probabilities", mode="before")
+    @classmethod
+    def _coerce_mapping_to_rows(cls, value: Any) -> Any:
+        """Accept a ``{label: probability}`` mapping as well as the list form.
+
+        Despite the strict ``{label, probability}`` array schema, some models
+        (and some proxy routes) return the distribution as a JSON object
+        mapping label to probability, e.g. ``{"cut": 0.25, "hold": 0.7,
+        "hike": 0.05}``. Coerce that shape into the canonical list of rows so a
+        well-formed answer is not discarded as a parse failure.
+        """
+        if isinstance(value, dict):
+            return [{"label": label, "probability": probability} for label, probability in value.items()]
+        return value
 
 
-_CATEGORICAL_DISTRIBUTION_JSON_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
+def _build_categorical_distribution_schema(elicit_reasoning: bool) -> dict[str, Any]:
+    """Build the strict ``json_schema`` for one elicited categorical distribution.
+
+    ``probabilities`` comes first so the model commits to the distribution
+    before any justification. When ``elicit_reasoning`` is True, a free-text
+    ``reasoning`` field is appended; strict mode with
+    ``additionalProperties: False`` requires every property in ``required``.
+    """
+    properties: dict[str, Any] = {
         "probabilities": {
             "type": "array",
             "items": {
@@ -114,10 +151,17 @@ _CATEGORICAL_DISTRIBUTION_JSON_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
-    },
-    "required": ["probabilities"],
-    "additionalProperties": False,
-}
+    }
+    required = ["probabilities"]
+    if elicit_reasoning:
+        properties["reasoning"] = {"type": "string"}
+        required.append("reasoning")
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
 
 
 def serialize_categorical_history(df: pd.DataFrame, categories: list[TaskCategory]) -> str:
@@ -157,10 +201,16 @@ def _label_for_value(value: float, categories: list[TaskCategory]) -> str | None
     return None
 
 
-def _build_system_prompt(override: str | None = None) -> str:
+def _build_system_prompt(override: str | None = None, *, elicit_reasoning: bool = False) -> str:
     """Return the categorical-probability system prompt, or ``override`` verbatim."""
     if override is not None:
         return override
+    reasoning_rule = (
+        "- Decide the distribution first, then briefly justify it in plain text in the "
+        "'reasoning' field (a few sentences naming the key drivers).\n"
+        if elicit_reasoning
+        else ""
+    )
     return (
         "You are a probabilistic forecaster of categorical events. Given the history of "
         "past outcomes and a question about a future event with a fixed set of ordered "
@@ -174,6 +224,7 @@ def _build_system_prompt(override: str | None = None) -> str:
         "many questions where you assign 0.7 to an outcome, that outcome should occur "
         "about 70% of the time.\n"
         "- Avoid 0.0 and 1.0 unless an outcome is logically impossible or certain.\n"
+        f"{reasoning_rule}"
         "- Base rates matter: anchor on how often each outcome has occurred historically, "
         "then adjust for the current situation."
     )
@@ -234,7 +285,9 @@ def _sample_distribution(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    response_format = make_json_schema_response_format("CategoricalDistribution", _CATEGORICAL_DISTRIBUTION_JSON_SCHEMA)
+    response_format = make_json_schema_response_format(
+        "CategoricalDistribution", _build_categorical_distribution_schema(cfg.elicit_reasoning)
+    )
 
     parsed, cost_usd, in_tokens, out_tokens, parse_failures = run_async(
         sample_n_async(
@@ -346,6 +399,7 @@ class CategoricalProbabilityLLMPredictor(LLMPredictor):
                 f"task '{task.task_id}' declares horizons={task.horizons}."
             )
 
+        set_current_trace_name(self.predictor_id)
         series_df, series_meta = get_history_and_meta(task, context)
         if self.cfg.history_window is not None:
             series_df = series_df.tail(self.cfg.history_window).reset_index(drop=True)
@@ -355,7 +409,9 @@ class CategoricalProbabilityLLMPredictor(LLMPredictor):
         forecast_date = (pd.Timestamp(context.as_of) + offset * horizon).normalize()
 
         history_str = serialize_categorical_history(series_df, task.categories)
-        system_prompt = _build_system_prompt(self.cfg.system_prompt_override)
+        system_prompt = _build_system_prompt(
+            self.cfg.system_prompt_override, elicit_reasoning=self.cfg.elicit_reasoning
+        )
         user_prompt = _build_user_prompt(
             task,
             history_str,
@@ -372,12 +428,14 @@ class CategoricalProbabilityLLMPredictor(LLMPredictor):
         )
         probabilities, raw_sum = _align_and_normalize(parsed, task.categories)
 
+        rationale = parsed.reasoning.strip()
         metadata = self._build_metadata(
             cost_usd=cost_usd,
             in_tokens=in_tokens,
             out_tokens=out_tokens,
             parse_failures=parse_failures,
             history_window=self.cfg.history_window,
+            extra={"rationale": rationale} if rationale else None,
         )
         if not isclose(raw_sum, 1.0, abs_tol=1e-9):
             metadata["probability_sum_raw"] = raw_sum

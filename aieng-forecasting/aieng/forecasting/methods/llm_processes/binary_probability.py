@@ -27,6 +27,7 @@ from aieng.forecasting.methods.llm_processes._client import (
     make_json_schema_response_format,
     run_async,
     sample_n_async,
+    set_current_trace_name,
 )
 from aieng.forecasting.methods.llm_processes.base import (
     LLMPredictor,
@@ -68,6 +69,16 @@ class BinaryProbabilityLLMPredictorConfig(LLMPredictorConfig):
         default=None,
         description="Optional replacement for the metadata-derived series description block.",
     )
+    elicit_reasoning: bool = Field(
+        default=True,
+        description=(
+            "When True, ask the model for a short free-text 'reasoning' field alongside the "
+            "probability, captured into Prediction.metadata['rationale'] for inspection and "
+            "downstream reasoning evaluation. The field is requested *after* the probability so "
+            "the model commits to the number first, keeping the answer-first ordering that "
+            "protects calibration. Set False to restore the bare probability-only elicitation."
+        ),
+    )
     system_prompt_override: str | None = Field(
         default=None,
         description="Full replacement for the built-in binary-probability system prompt.",
@@ -83,25 +94,49 @@ class BinaryProbabilityLLMPredictorConfig(LLMPredictorConfig):
 
 
 class _BinaryProbability(BaseModel):
-    """Internal Pydantic schema for one directly elicited event probability."""
+    """Internal Pydantic schema for one directly elicited event probability.
+
+    ``reasoning`` is optional so parsing succeeds whether or not the field was
+    requested (controlled by ``elicit_reasoning`` on the config).
+    """
 
     probability: float = Field(ge=0.0, le=1.0)
+    reasoning: str = Field(default="")
 
 
-_BINARY_PROBABILITY_JSON_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
+def _build_binary_probability_schema(elicit_reasoning: bool) -> dict[str, Any]:
+    """Build the strict ``json_schema`` for one event probability.
+
+    ``probability`` comes first so the model commits to the number before any
+    justification. When ``elicit_reasoning`` is True, a free-text ``reasoning``
+    field is appended; strict mode with ``additionalProperties: False`` requires
+    every property to be listed in ``required``.
+    """
+    properties: dict[str, Any] = {
         "probability": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-    },
-    "required": ["probability"],
-    "additionalProperties": False,
-}
+    }
+    required = ["probability"]
+    if elicit_reasoning:
+        properties["reasoning"] = {"type": "string"}
+        required.append("reasoning")
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
 
 
-def _build_system_prompt(override: str | None = None) -> str:
+def _build_system_prompt(override: str | None = None, *, elicit_reasoning: bool = False) -> str:
     """Return the binary-probability system prompt, or ``override`` verbatim."""
     if override is not None:
         return override
+    reasoning_rule = (
+        "- Decide your probability first, then briefly justify it in plain text in the "
+        "'reasoning' field (a few sentences naming the key drivers).\n"
+        if elicit_reasoning
+        else ""
+    )
     return (
         "You are a probabilistic forecaster of binary events. Given the history of past "
         "outcomes and a question about a future event, return one calibrated probability "
@@ -113,6 +148,7 @@ def _build_system_prompt(override: str | None = None) -> str:
         "- Report a CALIBRATED probability, not your confidence in a point answer: across "
         "many questions where you answer 0.7, the event should occur about 70% of the time.\n"
         "- Avoid 0.0 and 1.0 unless the outcome is logically certain.\n"
+        f"{reasoning_rule}"
         "- Base rates matter: anchor on how often the event has occurred historically, then "
         "adjust for the current situation."
     )
@@ -166,7 +202,9 @@ def _sample_probability(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    response_format = make_json_schema_response_format("BinaryProbability", _BINARY_PROBABILITY_JSON_SCHEMA)
+    response_format = make_json_schema_response_format(
+        "BinaryProbability", _build_binary_probability_schema(cfg.elicit_reasoning)
+    )
 
     parsed, cost_usd, in_tokens, out_tokens, parse_failures = run_async(
         sample_n_async(
@@ -228,6 +266,7 @@ class BinaryProbabilityLLMPredictor(LLMPredictor):
                 f"task '{task.task_id}' declares horizons={task.horizons}."
             )
 
+        set_current_trace_name(self.predictor_id)
         series_df, series_meta = get_history_and_meta(task, context)
         if self.cfg.history_window is not None:
             series_df = series_df.tail(self.cfg.history_window).reset_index(drop=True)
@@ -237,7 +276,9 @@ class BinaryProbabilityLLMPredictor(LLMPredictor):
         forecast_date = (pd.Timestamp(context.as_of) + offset * horizon).normalize()
 
         history_str = serialize_history(series_df, precision=self.cfg.precision)
-        system_prompt = _build_system_prompt(self.cfg.system_prompt_override)
+        system_prompt = _build_system_prompt(
+            self.cfg.system_prompt_override, elicit_reasoning=self.cfg.elicit_reasoning
+        )
         user_prompt = _build_user_prompt(
             task,
             history_str,
@@ -253,6 +294,7 @@ class BinaryProbabilityLLMPredictor(LLMPredictor):
             user_prompt=user_prompt,
         )
 
+        rationale = parsed.reasoning.strip()
         issued_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         return [
             Prediction(
@@ -268,6 +310,7 @@ class BinaryProbabilityLLMPredictor(LLMPredictor):
                     out_tokens=out_tokens,
                     parse_failures=parse_failures,
                     history_window=self.cfg.history_window,
+                    extra={"rationale": rationale} if rationale else None,
                 ),
             ),
         ]
