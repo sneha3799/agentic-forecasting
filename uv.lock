@@ -98,10 +98,14 @@ version = "0.1.0"
 source = { editable = "implementations" }
 dependencies = [
     { name = "aieng-forecasting", extra = ["agentic", "documents", "llm", "numerical"] },
+    { name = "beautifulsoup4" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "aieng-forecasting", extras = ["numerical", "llm", "agentic", "documents"], editable = "aieng-forecasting" }]
+requires-dist = [
+    { name = "aieng-forecasting", extras = ["numerical", "llm", "agentic", "documents"], editable = "aieng-forecasting" },
+    { name = "beautifulsoup4", specifier = ">=4.12,<5" },
+]
 
 [[package]]
 name = "aieng-agents"
