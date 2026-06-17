@@ -172,7 +172,7 @@ read-only skill when the reference material is fixed.
 ## 6. Checklist for adding a skill
 
 - [ ] The skill has at least one file in `references/`, `assets/`, or `scripts/`. If not, move the SKILL.md content into the agent instruction and leave it out of `skills_dirs` (Rule 1).
-      
+
 - [ ] If it has `references/`/`assets/` **but no `scripts/`**, the agent instruction says so explicitly (Rule 2) — ADK advertises `run_skill_script` regardless.
 - [ ] If it has `scripts/`, every script the model is likely to call actually exists, and the SKILL.md body lists the available scripts.
 - [ ] The SKILL.md body is minimal — nothing that duplicates the system prompt (Rule 3).
