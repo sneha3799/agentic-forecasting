@@ -36,7 +36,7 @@ Current extras:
 - `agentic` — Google ADK runner (`AdkTextRunner`), generic agent factory (`build_adk_agent`), Track 1 predictor wrapper (`AgentPredictor`), structured agent output schemas, E2B code interpreter, and Langfuse / OpenInference tracing
 
 > **E2B setup:** the `agentic` extra requires a one-time sandbox image build.
-> See [Getting Started — step 3](../README.md#3-agentic-track-only-build-the-e2b-sandbox-image) in the root README.
+> See [Build the E2B sandbox image](../README.md#build-the-e2b-sandbox-image-agentic-implementations-only) in the root README.
 
 Use-case notebooks and task-specific configuration live in `../implementations`.
 
