@@ -26,12 +26,10 @@ naturally binary problems — prediction-market-style questions — and the
 experiment notebook opens with it as a warm-up, including a numerical check
 of the RPS(K=2) ≡ Brier identity.
 
-If this is your first session with the repo, start at
-`implementations/getting_started/`; come here when you want to see the same
-harness applied to a problem that is not a time series.
-
-> See `planning-docs/bootcamp-workplan.md` for current cohort 1 scope. This
-> is the sole discrete-event reference experiment.
+This is the repository's only discrete-event reference implementation: come
+here to see the same evaluation harness applied to a problem that is not a time
+series. For the minimal continuous-forecasting loop, see
+[`getting_started/`](../getting_started/).
 
 ---
 

@@ -1,8 +1,8 @@
 # aieng-forecasting
 
-Core library for the Agentic Forecasting Bootcamp.
+The core library for Agentic Forecasting.
 
-This package provides stable infrastructure used across reference implementations:
+This package provides the stable infrastructure used across all reference implementations:
 
 - Data adapters, series storage, and cutoff-scoped forecast contexts.
 - Forecasting task and prediction payload models.
@@ -40,4 +40,4 @@ Current extras:
 
 Use-case notebooks and task-specific configuration live in `../implementations`.
 
-For current bootcamp scope, milestones, ownership, and non-goals, see `../planning-docs/bootcamp-workplan.md`.
+For the reusable method catalog, see [`aieng/forecasting/methods/README.md`](aieng/forecasting/methods/README.md). For architecture principles and extension ideas, see `../planning-docs/roadmap.md`.

@@ -1,70 +1,55 @@
 # Agentic Forecasting
 
-A research and learning platform for the Agentic Forecasting Bootcamp.
+A foundation for building, evaluating, and comparing forecasting systems — conventional numerical models, LLM Processes, and agentic forecasters — on real economic, financial, and event-prediction tasks.
 
-The bootcamp teaches participants to build, evaluate, and compare forecasting systems on a focused set of economic, financial, and event-prediction tasks. The cohort 1 priority is a stable repo, clear reference implementations, and a compelling sponsor-facing story about what agentic forecasting can add.
+The repository pairs a small, stable core library with a set of self-contained reference implementations. The library gives you cutoff-safe data handling, a single `Predictor` interface, and a backtest/evaluation harness. Each reference implementation is a worked example of a different forecasting problem and the techniques that suit it. Start from whichever one is closest to what you want to build.
 
-## What This Repo Provides
+## What's here
 
-- Core forecasting infrastructure in `aieng-forecasting` (`aieng.forecasting`): data services, cutoff enforcement, forecasting tasks, prediction payloads, backtesting, evaluation, and artifacts.
-- Reference methods in `aieng-forecasting/aieng/forecasting/methods`: reusable `Predictor` implementations including naive baselines (continuous, binary, and categorical), Darts numerical predictors, LLM-process predictors (continuous, binary-probability, and categorical-probability), and ADK-based agentic infrastructure (`build_adk_agent`, `AdkTextRunner`, and `AgentPredictor`).
-- Langfuse / OpenTelemetry tracing bootstrap (`aieng.forecasting.langfuse_tracing`) for LiteLLM and Google ADK.
-- Reference experiments in `implementations`: notebooks, helpers, task-specific configuration, and (target layout) co-located YAML specs.
-- YAML backtest and eval specs co-located under `implementations/<use-case>/specs/`.
-- Data population scripts in `scripts`, including `build_e2b_template.py` for building the E2B sandbox image.
-- Planning source of truth in `planning-docs/bootcamp-workplan.md`.
+- **Core library** — `aieng-forecasting` (`aieng.forecasting`): data services, cutoff enforcement, forecasting tasks, prediction payloads, backtesting, evaluation, and artifacts.
+- **Reusable methods** — `aieng.forecasting.methods`: `Predictor` implementations including naive baselines (continuous, binary, and categorical), Darts numerical predictors, LLM-process predictors (continuous, binary-probability, and categorical-probability), and ADK-based agentic infrastructure (`build_adk_agent`, `AdkTextRunner`, `AgentPredictor`).
+- **Reference implementations** — `implementations/<use-case>/`: notebooks, helper modules, task-specific configuration, and co-located YAML specs.
+- **Tracing** — Langfuse / OpenTelemetry bootstrap (`aieng.forecasting.langfuse_tracing`) for LiteLLM and Google ADK.
+- **Data scripts** — `scripts/`: one fetch script per data source, plus `build_e2b_template.py` for the agentic code-execution sandbox.
 
-## Bootcamp Scope
+## Two ways to use a forecaster
 
-The formal cohort 1 reference experiments are:
+Every method can be used in one of two modes, and the distinction runs through the library:
 
-| Experiment | Role | Current state |
+- **Track 1 — evaluated prediction.** Numerical methods, LLM Processes, and agentic forecasters emit standardized `Prediction` objects and are compared head-to-head with the evaluation harness (CRPS, Brier, RPS, calibration).
+- **Track 2 — interactive analysis.** The same agents can do scenario analysis, monitoring, open-ended Q&A, code-backed analysis, and reasoning over evidence — useful work that isn't reduced to a single score.
+
+## Reference implementations
+
+Each is independent and self-contained — pick the one that matches the problem you care about, and read that directory's `README.md` for the full walkthrough. They are not meant to be worked in order.
+
+| Implementation | The problem | Concepts & techniques it demonstrates |
 | --- | --- | --- |
-| Getting Started | CPI gasoline hello-world for the evaluation loop. | Implemented. |
-| Food Price Forecasting | CFPR-style multivariate food CPI task (clean baseline vs LLMP). | Implemented for the canonical StatCan path. |
-| Energy/Oil | Flagship daily WTI commodity price forecasting (Prophet, LLMP, progressive agents, and an adaptive learning agent vs 2026 geopolitical shock). | Implemented. |
-| Financial Markets - S&P 500 | Deep numerical-methods comparison; financial-markets Track 1 template. | In progress (Behnoosh). |
-| BoC Rate Decisions | Discrete-event reference experiment: cut/hold/hike direction at the next announcement, RPS-scored; compact binary (Brier) reference included. | Implemented: quantitative path, cutoff-aware BoC press-release ingestion, and a Langfuse-native reasoning-alignment evaluator (notebook 03). Live forecasting on future announcements is an extension. |
+| [`getting_started/`](implementations/getting_started/) | One CPI series, one month ahead. | The smallest end-to-end loop: a `Predictor`, a `BacktestSpec` and `EvalSpec`, naive + AutoARIMA baselines, CRPS scoring. The place to learn the evaluation framework. |
+| [`food_price_forecasting/`](implementations/food_price_forecasting/) | A multivariate food-CPI trajectory (CFPR-style). | Nine correlated sub-indices, a 12-step trajectory, a domain metric (avg/avg YoY), baselines vs LLM-Process predictors, leakage-aware backtests, and cached artifacts for fast iteration. |
+| [`energy_oil_forecasting/`](implementations/energy_oil_forecasting/) | Daily WTI crude-oil price under regime-breaking news. | A capability progression — Prophet → LLM-Process → news-grounded agent → code-executing agent — plus an adaptive agent that learns a strategy from data and is scored before vs after. Continuous trajectories, a binary up-shock task, and interactive scenario analysis. |
+| [`boc_rate_decisions/`](implementations/boc_rate_decisions/) | Will the Bank of Canada cut, hold, or hike at its next meeting? | Discrete-event forecasting: ordered-categorical outcomes on an irregular calendar, RPS scoring and one-vs-rest calibration (instead of CRPS), a binary (Brier) special case, cutoff-aware document ingestion, and an LLM-as-judge that scores an agent's reasoning against the official rationale. |
+| [`sp500_forecasting/`](implementations/sp500_forecasting/) | S&P 500 multivariate numerical comparison. | A template for deep numerical-methods comparison on financial-market series with covariates. (In active development.) |
 
-ForecastBench, energy as a formal Track 1 extension, additional financial assets, richer covariates, and time-series foundation models are participant extension ideas unless explicitly pulled into the workplan.
+## Data sources
 
-## Forecasting Tracks
+- **StatCan** — Canadian CPI and related macroeconomic series.
+- **FRED** — macroeconomic and commodity series.
+- **yfinance** — equities, indices, and commodity futures.
 
-Track 1 is the evaluated path. Numerical methods, LLM Processes, and agentic forecasters emit standardized `Prediction` objects and can be compared with the repository evaluation harness.
+Historical data is cached locally under `data/` and is not committed. Each implementation's README names the fetch script(s) it needs.
 
-Track 2 is the capability showcase. It covers scenario analysis, monitoring, open-ended Q&A, code-backed analysis, and reasoning over evidence. Track 2 is not scored head-to-head in this bootcamp.
-
-## Data Sources
-
-The reference data sources are:
-
-- StatCan for Canadian CPI and related macroeconomic series.
-- FRED for macroeconomic and commodity series.
-- yfinance for equities, indices, and commodity futures.
-
-Historical data is cached locally under `data/` and is not committed.
-
-## Repository Layout
+## Repository layout
 
 ```text
-aieng-forecasting/         # Installable library package: import as aieng.forecasting
-implementations/           # Reference experiments, helpers, and co-located specs
-|-- getting_started/
-|   `-- specs/             # CPI gasoline backtest and eval YAML
-|-- food_price_forecasting/
-|   `-- specs/             # CFPR backtest YAML
-|-- energy_oil_forecasting/
-|   `-- specs/             # WTI crude oil backtest and eval YAML
-`-- boc_rate_decisions/
-    `-- specs/             # BoC rate-direction (and binary rate-cut) backtest, eval, and smoke YAML
-planning-docs/
-`-- bootcamp-workplan.md   # Single planning source of truth
-playground/                # Demo and exploration code (not formal reference experiments)
-`-- news_search/           # News grounding playground
-scripts/                   # Data population scripts
+aieng-forecasting/   # Installable library: import as aieng.forecasting
+implementations/     # Self-contained reference implementations + co-located specs
+scripts/             # Data-fetch scripts + E2B template builder
+planning-docs/       # Architecture notes and the extension/roadmap catalog
+playground/          # Exploration and archived demos (not reference implementations)
 ```
 
-## Getting Started
+## Setup
 
 Install dependencies from the repo root:
 
@@ -74,7 +59,7 @@ cd agentic-forecasting
 uv sync
 ```
 
-**macOS — LightGBM and OpenMP:** The library depends on **LightGBM** (used by `DartsLightGBMPredictor` and some notebooks). The PyPI wheel expects **OpenMP** at runtime. If you see `Library not loaded: @rpath/libomp.dylib` when importing or training, install Homebrew’s OpenMP once and restart your shell or Jupyter kernel:
+**macOS — LightGBM and OpenMP.** The library depends on **LightGBM** (used by `DartsLightGBMPredictor` and some notebooks). The PyPI wheel expects **OpenMP** at runtime. If you see `Library not loaded: @rpath/libomp.dylib` when importing or training, install Homebrew's OpenMP once and restart your shell or Jupyter kernel:
 
 ```bash
 brew install libomp
@@ -82,15 +67,15 @@ brew install libomp
 
 On Apple Silicon the dylib is typically under `/opt/homebrew/opt/libomp/lib/`; on Intel Homebrew, `/usr/local/opt/libomp/lib/`.
 
-### 2. Populate the data cache
+### Populate the data cache
 
-Data is fetched once and cached locally (gitignored). Each use case names the fetch script(s) it needs in its own `README.md` — e.g. `scripts/fetch_cpi.py` (getting started), `scripts/fetch_wti.py` (energy), `scripts/fetch_boc.py` and `scripts/fetch_boc_press_releases.py` (BoC), `scripts/fetch_fred.py` (S&P 500). Run the relevant one before opening that use case's notebooks:
+Data is fetched once and cached locally (gitignored). Each implementation names the fetch script(s) it needs in its own `README.md` — for example `scripts/fetch_cpi.py` (getting started), `scripts/fetch_wti.py` (energy), `scripts/fetch_boc.py` and `scripts/fetch_boc_press_releases.py` (BoC), and `scripts/fetch_fred.py` (S&P 500). Run the relevant one before opening that implementation's notebooks:
 
 ```bash
 uv run python scripts/fetch_cpi.py
 ```
 
-### 3. (Agentic track only) Build the E2B sandbox image
+### Build the E2B sandbox image (agentic implementations only)
 
 Agentic forecasters can run code in an E2B cloud sandbox. Do this once before enabling code execution in `build_adk_agent`:
 
@@ -104,19 +89,9 @@ Agentic forecasters can run code in an E2B cloud sandbox. Do this once before en
    uv run --env-file .env scripts/build_e2b_template.py
    ```
 
-The template is named `agentic-forecasting-bootcamp` and is the default in `CodeExecutionConfig.template_name`.
+The template name is the default in `CodeExecutionConfig.template_name`, so notebooks pick it up automatically.
 
-### 4. Start with a reference experiment
-
-Each use case under `implementations` has a `README.md` with a recommended learning path.
-
-- **Start here:** `implementations/getting_started/` — the hello-world tour. Single series (CPI gasoline), 1-month horizon, naive + AutoARIMA baselines, one `BacktestSpec`, one `EvalSpec`. The smallest useful end-to-end walkthrough of the evaluation framework.
-- **Graduate to:** `implementations/food_price_forecasting/` — the CFPR reference experiment, flagship of the no-futures multivariate case. Nine correlated CPI sub-indices, a 12-step trajectory, the avg/avg YoY metric from the real Canada's Food Price Report, baselines plus LLMP and agentic predictors, helper modules for analysis and plotting, and cached artefacts for fast iteration.
-- **The flagship:** `implementations/energy_oil_forecasting/` — the daily WTI crude-oil reference, built around the 2026 Persian Gulf shock. A stateless capability track (Prophet → LLMP → news-grounded agent → code-executing agent; notebooks 01–04) plus an adaptive-agent track that learns a strategy from 2025 data and is scored before/after on 2026 (notebooks 05–06). The May 21 information-session notebooks are archived under `playground/energy_case_study/`.
-- **Then branch out:** `implementations/boc_rate_decisions/` — the discrete-event reference. Cut/hold/hike direction at the next Bank of Canada announcement: ordered-categorical tasks on an irregular meeting calendar, RPS scoring and one-vs-rest calibration instead of CRPS, a compact binary (Brier) warm-up for prediction-market-style problems, and an agentic analyst whose reasoning traces feed a reasoning-alignment evaluator (notebook 03) that scores the analyst's rationale against the Bank's published explanation.
-- **Look ahead to:** the S&P 500 numerical comparison (Behnoosh, in progress) and deeper agent and analyst work. See `planning-docs/bootcamp-workplan.md` for current scope, the wind-down status, and the participant extension menu.
-
-## Core Concepts
+## Core concepts
 
 `Predictor` is the interface every forecasting method implements:
 
@@ -136,7 +111,11 @@ class MyPredictor(Predictor):
 
 `backtest()` is the open iteration loop against historical data. `evaluate()` is the budgeted protected-window loop.
 
-## Code Quality
+## Extending the foundation
+
+This repo is a starting point, not a finished product. The shape of a new forecaster is always the same: implement `Predictor`, declare a spec, and run `backtest()` / `evaluate()` to compare it against the baselines. Each reference implementation's README ends with concrete extension ideas; `planning-docs/roadmap.md` collects the cross-cutting ones (new data sources, additional methods, live forecasting, deeper agent work).
+
+## Code quality
 
 ```bash
 make lint
@@ -151,6 +130,8 @@ uv run pre-commit run --all-files
 
 ## Documentation
 
-Use `planning-docs/bootcamp-workplan.md` for active planning. The other files in `planning-docs/` are retired redirects kept only for continuity.
+- Per-implementation READMEs under `implementations/<use-case>/` — the primary user surface.
+- `aieng-forecasting/README.md` and `aieng-forecasting/aieng/forecasting/methods/README.md` — the library and the method catalog.
+- `planning-docs/roadmap.md` — architecture principles and extension ideas.
 
-When changing scope, architecture, setup, experiments, or datasets, update the workplan and the relevant README files in the same session.
+Keep code, notebooks, specs, and these docs in sync when you change behavior, setup, layout, or datasets.

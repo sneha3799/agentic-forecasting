@@ -1,8 +1,8 @@
 # WTI Crude Oil Price Forecasting
 
-This is the bootcamp's flagship **high-frequency context-driven** reference experiment. Unlike long-horizon annual CPI forecasting, the daily resolution of oil markets makes genuinely prospective, real-time evaluation practical: we can lock an agent configuration today and measure its accuracy on unresolved horizons within weeks.
+The **high-frequency, context-driven** reference implementation. Unlike long-horizon annual CPI forecasting, the daily resolution of oil markets makes genuinely prospective, real-time evaluation practical: you can lock an agent configuration today and measure its accuracy on unresolved horizons within weeks.
 
-WTI Crude Oil is highly liquid and sensitive to geopolitical risk, macroeconomic policy, and supply disruptions. This experiment demonstrates the core thesis of the bootcamp:
+WTI Crude Oil is highly liquid and sensitive to geopolitical risk, macroeconomic policy, and supply disruptions. This implementation works through a progression of forecasting approaches:
 
 1. **Statistical models** (Prophet) extrapolate trend and seasonality but are blind to regime-breaking news.
 2. **Context-aware agentic models** (bounded Google Search) adapt to shocks by reasoning over shipping lane closures, OPEC+ policy, and political escalation.
@@ -41,7 +41,7 @@ introduced in notebook 2.
 |----------|-------|---------|
 | **[`05_forecast_tool_demo.ipynb`](05_forecast_tool_demo.ipynb)** | **The Forecast Tool** — a standalone demo (not part of the main sequence) of a conventional AutoARIMA function tool (`build_wti_tool_config`) as a controlled, auditable alternative to open-ended code execution | Yes |
 
-The original May 21 information-session notebooks are archived in [`playground/energy_case_study/`](../../playground/energy_case_study/); the notebooks here are the formal reference for cohort 1.
+An earlier set of information-session notebooks is archived in [`playground/energy_case_study/`](../../playground/energy_case_study/); the notebooks here are the maintained reference.
 
 ---
 

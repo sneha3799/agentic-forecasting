@@ -4,20 +4,14 @@ Replicates the **Canada's Food Price Report (CFPR)** forecasting methodology —
 an annual estimate of the year-over-year percentage change in Canadian food
 prices across nine CPI sub-categories.
 
-This is the bootcamp's flagship **no-futures multivariate** reference
-experiment — the graduation step from
-`implementations/getting_started/`, and the case where
-context genuinely matters because no market aggregator summarises the
-answer.  It is a fully working, literature-aligned forecasting task that
-runs in minutes on a laptop and provides a launching pad for LLM and
-agent-based predictors.  If this is your first session with the repo,
-start at `implementations/getting_started/` and come here once the single-series loop is
-familiar.
-
-> See `planning-docs/bootcamp-workplan.md` for the current cohort 1
-> scope. CFPR remains the flagship no-futures multivariate reference
-> experiment; S&P 500 is the first formal financial-markets Track 1
-> template, and energy/oil is the May 21 and interactive analyst demo.
+This is the **no-futures multivariate** reference implementation — the case
+where context genuinely matters because no market aggregator summarises the
+answer. It is a fully working, literature-aligned forecasting task that runs
+in minutes on a laptop and provides a launching pad for LLM and agent-based
+predictors. It extends the single-series evaluation loop from
+[`getting_started/`](../getting_started/) to multiple correlated targets and a
+multi-step trajectory, but stands on its own — you don't need to work through
+that one first.
 
 ---
 
@@ -120,9 +114,9 @@ Unit tests for the analysis helpers live under
 ## Covariates
 
 FRED macro covariates are **not** used in the canonical experiment. Framing
-multivariate exogenous inputs for agentic and LLM-based predictors remains
-extension work tracked in `planning-docs/bootcamp-workplan.md`. Experiments
-that need FRED covariates should register their own via `FREDAdapter`.
+multivariate exogenous inputs for agentic and LLM-based predictors is a natural
+extension. Experiments that need FRED covariates should register their own via
+`FREDAdapter`.
 
 ---
 
@@ -218,4 +212,4 @@ uv run python scripts/extract_reports.py
 - **CRPS is the primary metric.**  MAPE on the median is a secondary,
   point-estimate sanity check.
 - **No ensemble model selection.** The leaderboard compares individual
-  predictors; assembling them into a committee is left as a bootcamp exercise.
+  predictors; assembling them into a committee is left as an exercise.

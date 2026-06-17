@@ -10,24 +10,21 @@ Instructions here are **general when possible, specific when needed.** Prefer pa
 
 ### planning-docs/
 
-`./planning-docs/bootcamp-workplan.md` is the single active planning source of truth for cohort 1 readiness. It captures current scope, milestones, task sequencing, ownership, architectural decisions that matter for planning, and explicit non-goals.
+`./planning-docs/roadmap.md` captures the architecture principles worth preserving and the catalog of extension ideas. It is the place for cross-cutting design notes, not per-task tracking.
 
-The old planning log, backlog, project charter, and technical design files are retired redirects. Do not add new decisions or tasks to those files. If a decision changes scope, dates, ownership, architecture, datasets, or reference experiments, update `planning-docs/bootcamp-workplan.md` first and then update the relevant README files.
+The older planning log, backlog, project charter, and technical-design files under `planning-docs/` (and `planning-docs/archive/`) are retired and kept only for continuity — do not add new decisions to them. When a change affects architecture, datasets, repo layout, or the set of reference implementations, update `planning-docs/roadmap.md` (for an architectural principle or a new extension idea) and the relevant README files in the same session.
 
-Current project framing to preserve:
+Project shape to keep in mind:
 
-- Cohort 1 readiness is the priority; the program is winding down toward Build Days.
-- Complete reference experiments: Getting Started, Food Price Forecasting, Energy/Oil (stateless capability track plus an adaptive learning agent), and BoC Rate Decisions (quantitative path, cutoff-aware press-release ingestion, and a Langfuse-native reasoning-alignment evaluator; live forecasting on future announcements is an extension).
-- In progress: S&P 500 numerical comparison (Behnoosh).
-- Energy/oil is the formal reference under `implementations/energy_oil_forecasting/`; the May 21 information-session notebooks are archived under `playground/energy_case_study/`.
-- Reusable predictors live in `aieng.forecasting.methods`; use-case material lives in `implementations/<use-case>/`.
+- The core library `aieng.forecasting` owns stable infrastructure; reusable predictors live in `aieng.forecasting.methods`; use-case material lives in `implementations/<use-case>/`.
 - YAML specs are co-located under `implementations/<use-case>/specs/`.
-- Ali owns LLMP refinement and the broader agentic forecasting architecture (Track 1 + Track 2).
-- Ethan owns energy/oil reference promotion, BoC reference, and live-testing infrastructure (with Ali).
+- Reference implementations: Getting Started, Food Price Forecasting, Energy/Oil (stateless capability track plus an adaptive learning agent), BoC Rate Decisions (quantitative path, cutoff-aware press-release ingestion, and a reasoning-alignment evaluator), and S&P 500 (in active development).
+- Energy/oil's older information-session notebooks are archived under `playground/energy_case_study/`.
+- Continuous and discrete-event forecasts are output modalities; numerical methods, LLM Processes, and agentic forecasters are method families that apply to either.
 
 ### README files
 
-Search the repo for `README.md` files (excluding `.venv/`) to find all current READMEs. Check them for needed updates whenever a design change is made — datasets, architecture, repo layout, new methods or experiments. READMEs are often the first thing a new contributor reads; keep them accurate.
+Search the repo for `README.md` files (excluding `.venv/`) to find all current READMEs. Check them for needed updates whenever a design change is made — datasets, architecture, repo layout, new methods or implementations. READMEs are the primary user surface and the first thing a new contributor reads; keep them accurate and production-quality (no internal program/ownership framing).
 
 ---
 
@@ -39,7 +36,7 @@ Historical data is stored in `data/` at the repo root (gitignored). Before runni
 
 ### Model selection
 
-The project standardizes on **two** Vector-proxy models so examples stay consistent for participants: `gemini-3.1-flash-lite-preview` (the **lite / default** model) and `gemini-3.5-flash` (the **advanced** model, used for the adaptive-agent path and curriculum runs). Both are defined once in `aieng.forecasting.models` as `LITE_MODEL` / `ADVANCED_MODEL` (`DEFAULT_MODEL = LITE_MODEL`). Reference these constants in code rather than hardcoding model strings; notebooks pick one of the two literals with the other shown as a commented alternative. See `planning-docs/vector-llm-proxy.md` for the full convention.
+The project standardizes on **two** Vector-proxy models so examples stay consistent: `gemini-3.1-flash-lite-preview` (the **lite / default** model) and `gemini-3.5-flash` (the **advanced** model, used for the adaptive-agent path and curriculum runs). Both are defined once in `aieng.forecasting.models` as `LITE_MODEL` / `ADVANCED_MODEL` (`DEFAULT_MODEL = LITE_MODEL`). Reference these constants in code rather than hardcoding model strings; notebooks pick one of the two literals with the other shown as a commented alternative. See `planning-docs/vector-llm-proxy.md` for the full convention.
 
 ### Code quality (not on commit)
 
